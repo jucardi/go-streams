@@ -1,52 +1,96 @@
 package streams
 
+import (
+	"reflect"
+)
+
 type Stream struct {
-	array      []interface{}
-	filters    []func(interface{}) bool
-	exceptions []func(interface{}) bool
+	//original    interface{}
+	arrayType   reflect.Type
+	array       reflect.Value
+	elementType reflect.Type
+	filters     []func(reflect.Value) bool
+	exceptions  []func(reflect.Value) bool
 }
 
+func From(array interface{}) *Stream {
+	arrayType := reflect.TypeOf(array)
 
-func From(array []interface{}) *Stream {
-	return &Stream{array: array}
+	if arrayType.Kind() != reflect.Slice && arrayType.Kind() != reflect.Array {
+		panic("Unable to create Stream from a none Slice or none Array")
+	}
+
+	return &Stream{
+		//original:    array,
+		array:       reflect.ValueOf(array),
+		arrayType:   arrayType,
+		elementType: reflect.TypeOf(array).Elem(),
+	}
 }
 
-func (s *Stream) Filter(f func(interface{}) bool) *Stream {
+func (s *Stream) Filter(f func(reflect.Value) bool) *Stream {
 	s.filters = append(s.filters, f)
 	return s
 }
 
-func (s *Stream) Except(f func(interface{}) bool) *Stream {
+func (s *Stream) Except(f func(reflect.Value) bool) *Stream {
 	s.filters = append(s.exceptions, f)
 	return s
 }
 
+func (s *Stream) First() reflect.Value {
+	if filtered := s.start(); filtered.Len() > 0 {
+		return filtered.Index(0)
+	} else {
+		return reflect.ValueOf(nil)
+	}
+}
+
+func (s *Stream) AnyMatch(f func(reflect.Value) bool) bool {
+	return s.filterHandler(s.start(), []func(reflect.Value) bool{f}, false).Len() > 0
+}
+
+func (s *Stream) AllMatch(f func(reflect.Value) bool) bool {
+	array := s.start()
+	return array.Len() == s.filterHandler(array, []func(reflect.Value) bool{f}, false).Len()
+}
+
+func (s *Stream) NoneMatch(f func(reflect.Value) bool) bool {
+	return !s.AnyMatch(f)
+}
+
+func (s *Stream) Contains(value interface{}) bool {
+	return s.AnyMatch(func(val reflect.Value) bool {
+		return value == val.Interface()
+	})
+}
+
 // region Private functions
 
-func (s *Stream) start() []interface{} {
+func (s *Stream) start() reflect.Value {
 	var array = s.array
 	array = s.filter(array)
 	array = s.except(array)
-
 	return array
 }
 
-func (s *Stream) filter(array []interface{}) []interface{} {
-	return genericFilter(array, s.filters, false)
+func (s *Stream) filter(array reflect.Value) reflect.Value {
+	return s.filterHandler(array, s.filters, false)
 }
 
-func (s *Stream) except(array []interface{}) []interface{} {
-	return genericFilter(array, s.exceptions, true)
+func (s *Stream) except(array reflect.Value) reflect.Value {
+	return s.filterHandler(array, s.exceptions, true)
 }
 
-func genericFilter(array []interface{}, filters []func(interface{}) bool, negate bool) []interface{} {
+func (s *Stream) filterHandler(array reflect.Value, filters []func(reflect.Value) bool, negate bool) reflect.Value {
 	if len(filters) == 0 {
 		return array
 	}
 
-	var ret []interface{}
+	ret := reflect.MakeSlice(array.Type(), 0, 0)
 
-	for _, x := range array {
+	for i := 0; i < array.Len(); i++ {
+		x := array.Index(i)
 		var match bool = true
 
 		for _, f := range filters {
@@ -62,7 +106,7 @@ func genericFilter(array []interface{}, filters []func(interface{}) bool, negate
 		}
 
 		if match {
-			ret = append(ret, x)
+			ret = reflect.Append(ret, x)
 		}
 	}
 
@@ -93,17 +137,17 @@ func genericFilter(array []interface{}, filters []func(interface{}) bool, negate
 //    Count, Size
 
 // BOOLEAN
-//    AnyMatch, Any
-//    AllMatch, All
-//    NoneMatch
-//    Contains  -> Like Any, but instead of receiving a func, receives an element to perform an equals operation
+//    AnyMatch, Any     DONE
+//    AllMatch, All     DONE
+//    NoneMatch         DONE
+//    Contains          DONE  -> Like Any, but instead of receiving a func, receives an element to perform an equals operation
 
 // OPTIONAL ?? or element
 //    Min
 //    Max
 //    Average
-//    FindFirst, First
-//    FindAny
+//    FindFirst, First         DONE
+//    FindAny                  For parallel operations. Post MVP
 //    ElementAt, At
 //    ElementAtOrDefault, AtOrDefault
 //    Last   (no args, returns last, func args, iterates from back to forth and returns the first match)
