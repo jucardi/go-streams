@@ -5,7 +5,6 @@ import (
 )
 
 type Stream struct {
-	//original    interface{}
 	arrayType   reflect.Type
 	array       reflect.Value
 	elementType reflect.Type
@@ -21,7 +20,6 @@ func From(array interface{}) *Stream {
 	}
 
 	return &Stream{
-		//original:    array,
 		array:       reflect.ValueOf(array),
 		arrayType:   arrayType,
 		elementType: reflect.TypeOf(array).Elem(),
@@ -34,7 +32,7 @@ func (s *Stream) Filter(f func(reflect.Value) bool) *Stream {
 }
 
 func (s *Stream) Except(f func(reflect.Value) bool) *Stream {
-	s.filters = append(s.exceptions, f)
+	s.exceptions = append(s.exceptions, f)
 	return s
 }
 
@@ -44,6 +42,10 @@ func (s *Stream) First() reflect.Value {
 	} else {
 		return reflect.ValueOf(nil)
 	}
+}
+
+func (s *Stream) Count() int {
+	return s.start().Len()
 }
 
 func (s *Stream) AnyMatch(f func(reflect.Value) bool) bool {
