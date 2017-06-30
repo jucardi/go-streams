@@ -5,13 +5,13 @@ import (
 )
 
 type Stream struct {
-	arrayType   reflect.Type
 	array       reflect.Value
 	elementType reflect.Type
-	filters     []func(reflect.Value) bool
-	exceptions  []func(reflect.Value) bool
+	filters     []func(interface{}) bool
+	exceptions  []func(interface{}) bool
 }
 
+// Creates a Stream from the given array
 func From(array interface{}) *Stream {
 	arrayType := reflect.TypeOf(array)
 
@@ -21,26 +21,44 @@ func From(array interface{}) *Stream {
 
 	return &Stream{
 		array:       reflect.ValueOf(array),
-		arrayType:   arrayType,
 		elementType: reflect.TypeOf(array).Elem(),
 	}
 }
 
-func (s *Stream) Filter(f func(reflect.Value) bool) *Stream {
+// Uses the specified function to filter elements within the Stream
+func (s *Stream) Filter(f func(interface{}) bool) *Stream {
 	s.filters = append(s.filters, f)
 	return s
 }
 
-func (s *Stream) Except(f func(reflect.Value) bool) *Stream {
+func (s *Stream) Except(f func(interface{}) bool) *Stream {
 	s.exceptions = append(s.exceptions, f)
 	return s
 }
 
-func (s *Stream) First() reflect.Value {
+func (s *Stream) Map(f func(interface{}) interface{}) *Stream {
+	array := s.start()
+	var newArr reflect.Value
+
+	for i := 0; i < array.Len(); i++ {
+		old := array.Index(i)
+		n := reflect.ValueOf(f(old.Interface()))
+
+		if i == 0 {
+			newArr = reflect.MakeSlice(reflect.SliceOf(n.Type()), 0, 0)
+		}
+
+		newArr = reflect.Append(newArr, n)
+	}
+
+	return From(newArr.Interface())
+}
+
+func (s *Stream) First() interface{} {
 	if filtered := s.start(); filtered.Len() > 0 {
-		return filtered.Index(0)
+		return filtered.Index(0).Interface()
 	} else {
-		return reflect.ValueOf(nil)
+		return nil
 	}
 }
 
@@ -48,23 +66,32 @@ func (s *Stream) Count() int {
 	return s.start().Len()
 }
 
-func (s *Stream) AnyMatch(f func(reflect.Value) bool) bool {
-	return s.filterHandler(s.start(), []func(reflect.Value) bool{f}, false).Len() > 0
+func (s *Stream) AnyMatch(f func(interface{}) bool) bool {
+	return s.filterHandler(s.start(), []func(interface{}) bool{f}, false).Len() > 0
 }
 
-func (s *Stream) AllMatch(f func(reflect.Value) bool) bool {
+func (s *Stream) AllMatch(f func(interface{}) bool) bool {
 	array := s.start()
-	return array.Len() == s.filterHandler(array, []func(reflect.Value) bool{f}, false).Len()
+	return array.Len() == s.filterHandler(array, []func(interface{}) bool{f}, false).Len()
 }
 
-func (s *Stream) NoneMatch(f func(reflect.Value) bool) bool {
+func (s *Stream) NoneMatch(f func(interface{}) bool) bool {
 	return !s.AnyMatch(f)
 }
 
 func (s *Stream) Contains(value interface{}) bool {
-	return s.AnyMatch(func(val reflect.Value) bool {
-		return value == val.Interface()
+	return s.AnyMatch(func(val interface{}) bool {
+		return value == val
 	})
+}
+
+func (s *Stream) ForEach(f func(interface {})) {
+	array := s.start()
+
+	for i := 0; i < array.Len(); i++ {
+		val := array.Index(i)
+		f(val.Interface())
+	}
 }
 
 // region Private functions
@@ -84,7 +111,7 @@ func (s *Stream) except(array reflect.Value) reflect.Value {
 	return s.filterHandler(array, s.exceptions, true)
 }
 
-func (s *Stream) filterHandler(array reflect.Value, filters []func(reflect.Value) bool, negate bool) reflect.Value {
+func (s *Stream) filterHandler(array reflect.Value, filters []func(interface{}) bool, negate bool) reflect.Value {
 	if len(filters) == 0 {
 		return array
 	}
@@ -97,9 +124,9 @@ func (s *Stream) filterHandler(array reflect.Value, filters []func(reflect.Value
 
 		for _, f := range filters {
 			if negate {
-				match = match && !f(x)
+				match = match && !f(x.Interface())
 			} else {
-				match = match && f(x)
+				match = match && f(x.Interface())
 			}
 
 			if !match {
@@ -118,9 +145,6 @@ func (s *Stream) filterHandler(array reflect.Value, filters []func(reflect.Value
 // endregion
 
 // STREAM
-//   Filter, Where     DONE
-//   Except            DONE
-//   Map
 //   Distinct
 //   Sorted, OrderBy    (orders by key)
 //   Sorted, OrderBy    (comparator)
@@ -135,20 +159,10 @@ func (s *Stream) filterHandler(array reflect.Value, filters []func(reflect.Value
 // ARRAY
 //    ToArray
 
-// INT
-//    Count, Size
-
-// BOOLEAN
-//    AnyMatch, Any     DONE
-//    AllMatch, All     DONE
-//    NoneMatch         DONE
-//    Contains          DONE  -> Like Any, but instead of receiving a func, receives an element to perform an equals operation
-
 // OPTIONAL ?? or element
 //    Min
 //    Max
 //    Average
-//    FindFirst, First         DONE
 //    FindAny                  For parallel operations. Post MVP
 //    ElementAt, At
 //    ElementAtOrDefault, AtOrDefault
@@ -166,3 +180,25 @@ func (s *Stream) filterHandler(array reflect.Value, filters []func(reflect.Value
 //    GroupJoin
 //    Intersect    (default equals or with comparer function)
 //    Union
+//
+//
+//
+// =========== DONE =============
+//
+// STREAM
+//   Filter, Where     DONE
+//   Except            DONE
+//   Map               DONE
+//
+// BOOLEAN
+//    AnyMatch, Any     DONE
+//    AllMatch, All     DONE
+//    NoneMatch         DONE
+//    Contains          DONE  -> Like Any, but instead of receiving a func, receives an element to perform an equals operation
+//
+// INT
+//    Count, Size       DONE
+//
+// ELEMENT
+//
+//    FindFirst, First         DONE
