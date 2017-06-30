@@ -2,6 +2,7 @@ package streams
 
 import (
 	"reflect"
+	"sort"
 )
 
 type Stream struct {
@@ -9,6 +10,17 @@ type Stream struct {
 	elementType reflect.Type
 	filters     []func(interface{}) bool
 	exceptions  []func(interface{}) bool
+	sorts       []sortFunc
+}
+
+type sortFunc struct {
+	fn   func(interface{}, interface{}) int
+	desc bool
+}
+
+type sorter struct {
+	array reflect.Value
+	sorts []sortFunc
 }
 
 // Creates a Stream from the given array
@@ -85,7 +97,7 @@ func (s *Stream) Contains(value interface{}) bool {
 	})
 }
 
-func (s *Stream) ForEach(f func(interface {})) {
+func (s *Stream) ForEach(f func(interface{})) {
 	array := s.start()
 
 	for i := 0; i < array.Len(); i++ {
@@ -94,12 +106,43 @@ func (s *Stream) ForEach(f func(interface {})) {
 	}
 }
 
+func (s *Stream) ToArray() interface{} {
+	return s.start().Interface()
+}
+
+func (s *Stream) OrderBy(f func(interface{}, interface{}) int) *Stream {
+	s.sorts = nil
+	return s.ThenBy(f)
+}
+
+func (s *Stream) ThenBy(f func(interface{}, interface{}) int) *Stream {
+	s.sorts = append(s.sorts, sortFunc{
+		fn:   f,
+		desc: false,
+	})
+	return s
+}
+
+func (s *Stream) OrderByDesc(f func(interface{}, interface{}) int) *Stream {
+	s.sorts = nil
+	return s.ThenByDesc(f)
+}
+
+func (s *Stream) ThenByDesc(f func(interface{}, interface{}) int) *Stream {
+	s.sorts = append(s.sorts, sortFunc{
+		fn:   f,
+		desc: true,
+	})
+	return s
+}
+
 // region Private functions
 
 func (s *Stream) start() reflect.Value {
 	var array = s.array
 	array = s.filter(array)
 	array = s.except(array)
+	array = s.sort(array)
 	return array
 }
 
@@ -142,22 +185,42 @@ func (s *Stream) filterHandler(array reflect.Value, filters []func(interface{}) 
 	return ret
 }
 
+func (s *Stream) sort(array reflect.Value) reflect.Value {
+	if len(s.sorts) == 0 {
+		return array
+	}
+
+	so := sorter{
+		array: array,
+		sorts: s.sorts,
+	}
+
+	sort.Slice(so.array.Interface(), so.makeLessFunc())
+	return so.array
+}
+
+func (s *sorter) makeLessFunc() (func(i, j int) bool) {
+	return func(x, y int) bool {
+		val := 0
+
+		for i := 0; val == 0 && i < len(s.sorts); i++ {
+			sort := s.sorts[i]
+			val = sort.fn(s.array.Index(x).Interface(), s.array.Index(y).Interface())
+
+			if sort.desc {
+				val = val * -1
+			}
+		}
+
+		return val < 0
+	}
+}
+
 // endregion
 
 // STREAM
 //   Distinct
-//   Sorted, OrderBy    (orders by key)
-//   Sorted, OrderBy    (comparator)
-//   OrderByDescending
-//   ThenBy
-//   ThenByDescending
 //   Reverse
-
-// VOID
-//    ForEach
-
-// ARRAY
-//    ToArray
 
 // OPTIONAL ?? or element
 //    Min
@@ -189,6 +252,10 @@ func (s *Stream) filterHandler(array reflect.Value, filters []func(interface{}) 
 //   Filter, Where     DONE
 //   Except            DONE
 //   Map               DONE
+//   OrderBy           DONE
+//   OrderByDescending DONE
+//   ThenBy            DONE
+//   ThenByDescending  DONE
 //
 // BOOLEAN
 //    AnyMatch, Any     DONE
@@ -200,5 +267,10 @@ func (s *Stream) filterHandler(array reflect.Value, filters []func(interface{}) 
 //    Count, Size       DONE
 //
 // ELEMENT
+//    FindFirst, First  DONE
 //
-//    FindFirst, First         DONE
+// VOID
+//    ForEach           DONE
+//
+// ARRAY
+//    ToArray           DONE

@@ -4,9 +4,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"testing"
 	"bytes"
+	"strings"
 )
 
-var testArray = []string{"peach", "apple", "pear", "plum"}
+var testArray = []string{"peach", "apple", "pear", "plum", "pineapple", "banana", "kiwi", "orange"}
 
 func TestStream_Contains(t *testing.T) {
 	contains := From(testArray).Contains("apple")
@@ -84,15 +85,26 @@ func TestStream_Map(t *testing.T) {
 func TestStream_ForEach(t *testing.T) {
 	buffer1 := new(bytes.Buffer)
 
-	for _,v := range testArray {
+	for _, v := range testArray {
 		buffer1.WriteString(v)
 	}
 
 	buffer2 := new(bytes.Buffer)
 
-	From(testArray).ForEach(func (v interface{}) {
+	From(testArray).ForEach(func(v interface{}) {
 		buffer2.WriteString(v.(string))
 	})
 
 	assert.Equal(t, buffer1.String(), buffer2.String())
+}
+
+func TestStream_OrderBy(t *testing.T) {
+	sortFn := func(a interface{}, b interface{}) int {
+		return strings.Compare(a.(string), b.(string))
+	}
+
+	expected := []string{"apple", "banana", "kiwi", "orange", "peach", "pear", "pineapple", "plum"}
+	sorted := From(testArray).OrderBy(sortFn).ToArray().([]string)
+
+	assert.Equal(t, expected, sorted)
 }
