@@ -144,6 +144,8 @@ func TestStream_ParallelForEach(t *testing.T) {
 	}
 }
 
+// This test may fail when running with coverage with IntelliJ due to the coverage capture that may affect
+// the performance of go channels. Running normally on a 2 CPU host, demonstrates an efficiency of around 200 % vs non-parallel.
 func TestStream_ParallelFiltering(t *testing.T) {
 	cores := getCores(-1)
 
