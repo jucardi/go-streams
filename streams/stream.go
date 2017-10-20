@@ -108,15 +108,6 @@ func (s *Stream) AtReverse(pos int, defaultValue ...interface{}) interface{} {
 	return nil
 }
 
-// Returns the element at the given position, starting from the last element to the first in the resulting stream.
-// If the value is nil or out of bounds, returns the given defaultValue.
-func (s *Stream) AtReverseOrDefault(pos int, defaultValue interface{}) interface{} {
-	if val := s.AtReverse(pos); val != nil {
-		return val
-	}
-	return defaultValue
-}
-
 // Counts the elements of the resulting stream
 func (s *Stream) Count() int {
 	return s.start().Len()
