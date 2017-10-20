@@ -3,8 +3,10 @@ package streams
 import (
 	"bytes"
 	"github.com/stretchr/testify/assert"
+	"math/rand"
 	"strings"
 	"testing"
+	"time"
 )
 
 var testArray = []string{"peach", "apple", "pear", "plum", "pineapple", "banana", "kiwi", "orange"}
@@ -140,6 +142,48 @@ func TestStream_ParallelForEach(t *testing.T) {
 	for _, v := range bigArray {
 		assert.True(t, v.Processed)
 	}
+}
+
+func TestStream_ParallelFiltering(t *testing.T) {
+	cores := getCores(-1)
+
+	// Skip this test if the machine only has one available CPU.
+	if cores == 1 {
+		return
+	}
+
+	sampleSize := 5000000
+	bigArray := make([]int, sampleSize)
+
+	for i := 0; i < sampleSize; i++ {
+		bigArray[i] = rand.Intn(100)
+	}
+
+	filter1 := func(v interface{}) bool {
+		return v.(int) < 50
+	}
+
+	filter2 := func(v interface{}) bool {
+		return v.(int) < 10
+	}
+
+	start := time.Now()
+	result1 := From(bigArray).Filter(filter1).Filter(filter2).ToArray().([]int)
+	elapsed1 := time.Since(start)
+
+	start = time.Now()
+	result2 := From(bigArray, -1).Filter(filter1).Filter(filter2).ToArray().([]int)
+	elapsed2 := time.Since(start)
+
+	println("Non-Parallel Filtering time: ", elapsed1/time.Millisecond, "ms")
+	println("Parallel Filtering time:  ", elapsed2/time.Millisecond, "ms")
+	println("Parallel took", 100*elapsed2/elapsed1, "% of Non-Parallel time")
+
+	// Validates parallel filtering was faster than non-parallel
+	assert.True(t, elapsed1 > elapsed2)
+
+	// Validates than both results were the same
+	assert.Equal(t, len(result1), len(result2))
 }
 
 func TestStream_OrderBy(t *testing.T) {

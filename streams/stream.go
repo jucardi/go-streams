@@ -14,6 +14,7 @@ type Stream struct {
 	filters     []func(interface{}) bool
 	exceptions  []func(interface{}) bool
 	sorts       []sortFunc
+	threads     int
 }
 
 type sortFunc struct {
@@ -27,16 +28,23 @@ type sorter struct {
 }
 
 // Creates a Stream from the given array
-func From(array interface{}) *Stream {
+func From(array interface{}, threads ...int) *Stream {
 	arrayType := reflect.TypeOf(array)
 
 	if arrayType.Kind() != reflect.Slice && arrayType.Kind() != reflect.Array {
 		panic("Unable to create Stream from a none Slice or none Array")
 	}
 
+	t := 1
+
+	if len(threads) > 0 {
+		t = threads[0]
+	}
+
 	return &Stream{
 		array:       reflect.ValueOf(array),
 		elementType: reflect.TypeOf(array).Elem(),
+		threads:     t,
 	}
 }
 
@@ -118,13 +126,14 @@ func (s *Stream) Count() int {
 
 // Indicates whether any elements of the stream match the given condition function
 func (s *Stream) AnyMatch(f func(interface{}) bool) bool {
-	return s.filterHandler(s.start(), []func(interface{}) bool{f}, false).Len() > 0
+	array := s.start()
+	return parallelFilterHandler(array, s.threads, []func(interface{}) bool{f}, false).Len() > 0
 }
 
 // Indicates whether ALL elements of the stream match the given condition function
 func (s *Stream) AllMatch(f func(interface{}) bool) bool {
 	array := s.start()
-	return array.Len() == s.filterHandler(array, []func(interface{}) bool{f}, false).Len()
+	return array.Len() == parallelFilterHandler(array, s.threads, []func(interface{}) bool{f}, false).Len()
 }
 
 // Indicates whether NONE of elements of the stream match the given condition function
@@ -150,17 +159,8 @@ func (s *Stream) ForEach(f func(interface{})) {
 }
 
 func (s *Stream) ParallelForEach(f func(interface{}), threads int, skipWait ...bool) {
-	var cores int
 	var wg sync.WaitGroup
-
-	maxCores := runtime.NumCPU()
-
-	if maxCores < threads || threads <= 0 {
-		cores = maxCores
-	} else {
-		cores = threads
-	}
-
+	cores := getCores(threads)
 	array := s.start()
 
 	if array.Len() < cores {
@@ -217,6 +217,10 @@ func (s *Stream) ThenBy(f func(interface{}, interface{}) int, desc ...bool) *Str
 }
 
 func (s *Stream) start() reflect.Value {
+	if s.threads != 1 {
+		return s.parallelStart(s.threads)
+	}
+
 	var array = s.array
 	array = s.filter(array)
 	array = s.except(array)
@@ -224,43 +228,28 @@ func (s *Stream) start() reflect.Value {
 	return array
 }
 
+func (s *Stream) parallelStart(threads int) reflect.Value {
+	var array = s.array
+	array = s.parallelStartHandler(array, threads)
+	array = s.sort(array)
+	return array
+}
+
 func (s *Stream) filter(array reflect.Value) reflect.Value {
-	return s.filterHandler(array, s.filters, false)
+	return filterHandler(array, 0, array.Len(), s.filters, false)
 }
 
 func (s *Stream) except(array reflect.Value) reflect.Value {
-	return s.filterHandler(array, s.exceptions, true)
+	return filterHandler(array, 0, array.Len(), s.exceptions, true)
 }
 
-func (s *Stream) filterHandler(array reflect.Value, filters []func(interface{}) bool, negate bool) reflect.Value {
-	if len(filters) == 0 {
-		return array
+func (s *Stream) parallelStartHandler(array reflect.Value, threads int) reflect.Value {
+	worker := func(result chan reflect.Value, start, end int) {
+		slice := filterHandler(array, start, end, s.filters, false)
+		result <- filterHandler(slice, 0, slice.Len(), s.exceptions, true)
 	}
 
-	ret := reflect.MakeSlice(array.Type(), 0, 0)
-
-	for i := 0; i < array.Len(); i++ {
-		x := array.Index(i)
-		var match bool = true
-
-		for _, f := range filters {
-			if negate {
-				match = match && !f(x.Interface())
-			} else {
-				match = match && f(x.Interface())
-			}
-
-			if !match {
-				break
-			}
-		}
-
-		if match {
-			ret = reflect.Append(ret, x)
-		}
-	}
-
-	return ret
+	return parallelHandler(array, threads, worker)
 }
 
 func (s *Stream) sort(array reflect.Value) reflect.Value {
@@ -291,6 +280,85 @@ func (s *sorter) makeLessFunc() func(i, j int) bool {
 		}
 
 		return val < 0
+	}
+}
+
+func filterHandler(array reflect.Value, start, end int, filters []func(interface{}) bool, negate bool) reflect.Value {
+	if len(filters) == 0 {
+		return array
+	}
+
+	ret := reflect.MakeSlice(array.Type(), 0, 0)
+
+	for i := start; i < end; i++ {
+		x := array.Index(i)
+		var match bool = true
+
+		for _, f := range filters {
+			if negate {
+				match = match && !f(x.Interface())
+			} else {
+				match = match && f(x.Interface())
+			}
+
+			if !match {
+				break
+			}
+		}
+
+		if match {
+			ret = reflect.Append(ret, x)
+		}
+	}
+
+	return ret
+}
+
+func parallelFilterHandler(array reflect.Value, threads int, filters []func(interface{}) bool, negate bool) reflect.Value {
+	if len(filters) == 0 {
+		return array
+	}
+
+	if threads == 1 {
+		return filterHandler(array, 0, array.Len(), filters, negate)
+	}
+
+	worker := func(result chan reflect.Value, start, end int) {
+		result <- filterHandler(array, start, end, filters, negate)
+	}
+
+	return parallelHandler(array, threads, worker)
+}
+
+func parallelHandler(array reflect.Value, threads int, worker func(result chan reflect.Value, start, end int)) reflect.Value {
+	ret := reflect.MakeSlice(array.Type(), 0, 0)
+	cores := getCores(threads)
+
+	if array.Len() < cores {
+		cores = array.Len()
+	}
+
+	sliceSize := int(math.Ceil(float64(array.Len()) / float64(cores)))
+	c := make(chan reflect.Value, cores)
+
+	for i := 0; i < cores; i++ {
+		go worker(c, i*sliceSize, (i+1)*sliceSize)
+	}
+
+	for i := 0; i < cores; i++ {
+		ret = reflect.AppendSlice(ret, <-c)
+	}
+
+	return ret
+}
+
+func getCores(threads int) int {
+	maxCores := runtime.NumCPU()
+
+	if maxCores < threads || threads <= 0 {
+		return maxCores
+	} else {
+		return threads
 	}
 }
 
