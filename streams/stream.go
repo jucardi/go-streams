@@ -1,7 +1,9 @@
 package streams
 
 import (
+	"math"
 	"reflect"
+	"runtime"
 	"sort"
 )
 
@@ -146,6 +148,45 @@ func (s *Stream) ForEach(f func(interface{})) {
 	}
 }
 
+func (s *Stream) ParallelForEach(f func(interface{}), threads int, skipWait ...bool) {
+	var cores int
+	maxCores := runtime.NumCPU()
+
+	if maxCores < threads || threads <= 0 {
+		cores = maxCores
+	} else {
+		cores = threads
+	}
+
+	array := s.start()
+
+	if array.Len() < cores {
+		cores = array.Len()
+	}
+
+	worker := func(done chan bool, start, end int) {
+		for i := start; i < end && i < array.Len(); i++ {
+			f(array.Index(i).Interface())
+		}
+		done <- true
+	}
+
+	channels := make([]chan bool, cores)
+	sliceSize := int(math.Ceil(float64(array.Len()) / float64(cores)))
+
+	for i := 0; i < cores; i++ {
+		c := make(chan bool, 1)
+		channels[i] = c
+		go worker(c, i*sliceSize, (i+1)*sliceSize)
+	}
+
+	if len(skipWait) == 0 || !skipWait[0] {
+		for _, c := range channels {
+			<-c
+		}
+	}
+}
+
 // Converts the resulting stream back to an array
 func (s *Stream) ToArray() interface{} {
 	return s.start().Interface()
@@ -252,6 +293,8 @@ func (s *sorter) makeLessFunc() func(i, j int) bool {
 		return val < 0
 	}
 }
+
+// TODO: Implement parallel filter
 
 // STREAM
 //   Distinct

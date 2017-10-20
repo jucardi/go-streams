@@ -115,6 +115,33 @@ func TestStream_ForEach(t *testing.T) {
 	assert.Equal(t, buffer1.String(), buffer2.String())
 }
 
+func TestStream_ParallelForEach(t *testing.T) {
+	sampleSize := 10000
+
+	type testObj struct {
+		Index     int
+		Processed bool
+	}
+
+	bigArray := make([]*testObj, sampleSize)
+
+	for i := 0; i < sampleSize; i++ {
+		bigArray[i] = &testObj{
+			Index:     i,
+			Processed: false,
+		}
+	}
+
+	stream := From(bigArray)
+	stream.ParallelForEach(func(v interface{}) {
+		v.(*testObj).Processed = true
+	}, 0)
+
+	for _, v := range bigArray {
+		assert.True(t, v.Processed)
+	}
+}
+
 func TestStream_OrderBy(t *testing.T) {
 	sortFn := func(a interface{}, b interface{}) int {
 		return strings.Compare(a.(string), b.(string))
