@@ -68,13 +68,63 @@ func (s *Stream) Map(f func(interface{}) interface{}) *Stream {
 	return From(newArr.Interface())
 }
 
-// Returns the first element of the resulting stream
+// Returns the first element of the resulting stream. Nil if the resulting stream is empty.
 func (s *Stream) First() interface{} {
-	if filtered := s.start(); filtered.Len() > 0 {
-		return filtered.Index(0).Interface()
-	} else {
-		return nil
+	return s.At(0)
+}
+
+// Attempts to get the first element of the resulting stream, if nil, returns the given default value.
+func (s *Stream) FirstOrDefault(defaultValue interface{}) interface{} {
+	return s.AtOrDefault(0, defaultValue)
+}
+
+// Returns the last element of the resulting stream. Nil if the resulting stream is empty.
+func (s *Stream) Last() interface{} {
+	return s.AtReverse(0)
+}
+
+func (s *Stream) LastOrDefault(defaultValue interface{}) interface{} {
+	return s.AtReverseOrDefault(0, defaultValue)
+}
+
+// Returns the element at the given index in the resulting stream.
+// Returns nil if out of bounds.
+func (s *Stream) At(index int) interface{} {
+	if filtered := s.start(); filtered.Len() > index {
+		return filtered.Index(index).Interface()
 	}
+	return nil
+}
+
+// Returns the element at the given index in the resulting stream.
+// If the value is nil or out of bounds, returns the given defaultValue.
+func (s *Stream) AtOrDefault(index int, defaultValue interface{}) interface{} {
+	if val := s.At(index); val != nil {
+		return val
+	}
+	return defaultValue
+}
+
+// Returns the element at the given position, starting from the last element to the first in the resulting stream.
+// Returns Nil if out of bounds.
+func (s *Stream) AtReverse(pos int) interface{} {
+	filtered := s.start()
+	i := filtered.Len() - 1 - pos
+
+	if i >= 0 {
+		return filtered.Index(i).Interface()
+	}
+
+	return nil
+}
+
+// Returns the element at the given position, starting from the last element to the first in the resulting stream.
+// If the value is nil or out of bounds, returns the given defaultValue.
+func (s *Stream) AtReverseOrDefault(pos int, defaultValue interface{}) interface{} {
+	if val := s.AtReverse(pos); val != nil {
+		return val
+	}
+	return defaultValue
 }
 
 // Counts the elements of the resulting stream
@@ -121,36 +171,28 @@ func (s *Stream) ToArray() interface{} {
 }
 
 // Sorts the elements ascending in the stream using the provided comparable function.
-func (s *Stream) OrderBy(f func(interface{}, interface{}) int) *Stream {
+// 'desc' indicates whether the sorting should be done descendant
+func (s *Stream) OrderBy(f func(interface{}, interface{}) int, desc ...bool) *Stream {
 	s.sorts = nil
-	return s.ThenBy(f)
+	return s.ThenBy(f, desc...)
 }
 
-// If two elements are considered equal after previously applying a comparable function, attempts to sort ascending the 2 elements with an additional comparable function.
-func (s *Stream) ThenBy(f func(interface{}, interface{}) int) *Stream {
+// If two elements are considered equal after previously applying a comparable function,
+// attempts to sort ascending the 2 elements with an additional comparable function.
+// 'desc' indicates whether the sorting should be done descendant
+func (s *Stream) ThenBy(f func(interface{}, interface{}) int, desc ...bool) *Stream {
+	d := false
+
+	if len(desc) > 0 {
+		d = desc[0]
+	}
+
 	s.sorts = append(s.sorts, sortFunc{
 		fn:   f,
-		desc: false,
+		desc: d,
 	})
 	return s
 }
-
-// Sorts the elements descending in the stream using the provided comparable function.
-func (s *Stream) OrderByDesc(f func(interface{}, interface{}) int) *Stream {
-	s.sorts = nil
-	return s.ThenByDesc(f)
-}
-
-// If two elements are considered equal after previously applying a comparable function, attempts to sort descending the 2 elements with an additional comparable function.
-func (s *Stream) ThenByDesc(f func(interface{}, interface{}) int) *Stream {
-	s.sorts = append(s.sorts, sortFunc{
-		fn:   f,
-		desc: true,
-	})
-	return s
-}
-
-// region Private functions
 
 func (s *Stream) start() reflect.Value {
 	var array = s.array
@@ -213,15 +255,15 @@ func (s *Stream) sort(array reflect.Value) reflect.Value {
 	return so.array
 }
 
-func (s *sorter) makeLessFunc() (func(i, j int) bool) {
+func (s *sorter) makeLessFunc() func(i, j int) bool {
 	return func(x, y int) bool {
 		val := 0
 
 		for i := 0; val == 0 && i < len(s.sorts); i++ {
-			sort := s.sorts[i]
-			val = sort.fn(s.array.Index(x).Interface(), s.array.Index(y).Interface())
+			sorter := s.sorts[i]
+			val = sorter.fn(s.array.Index(x).Interface(), s.array.Index(y).Interface())
 
-			if sort.desc {
+			if sorter.desc {
 				val = val * -1
 			}
 		}
@@ -229,8 +271,6 @@ func (s *sorter) makeLessFunc() (func(i, j int) bool) {
 		return val < 0
 	}
 }
-
-// endregion
 
 // STREAM
 //   Distinct
@@ -241,10 +281,6 @@ func (s *sorter) makeLessFunc() (func(i, j int) bool) {
 //    Max
 //    Average
 //    FindAny                  For parallel operations. Post MVP
-//    ElementAt, At
-//    ElementAtOrDefault, AtOrDefault
-//    Last   (no args, returns last, func args, iterates from back to forth and returns the first match)
-//    LastOrDefault
 
 // Concat --> Concatenates two sequences
 // Reduce, Aggregate       --->   Sum, min, max, average, string concatenation, with and without seed value
@@ -281,7 +317,12 @@ func (s *sorter) makeLessFunc() (func(i, j int) bool) {
 //    Count, Size       DONE
 //
 // ELEMENT
-//    FindFirst, First  DONE
+//    FindFirst, First   DONE
+//    ElementAt, At      DONE
+//    ElementAtOrDefault DONE
+//    AtOrDefault        DONE
+//    Last               DONE
+//    LastOrDefault      DONE
 //
 // VOID
 //    ForEach           DONE

@@ -17,6 +17,7 @@
 .idea/
 .vscode/
 
+test-artifacts/
 build
 test.sh
 tmp

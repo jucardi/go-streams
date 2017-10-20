@@ -1,10 +1,10 @@
 package streams
 
 import (
-	"github.com/stretchr/testify/assert"
-	"testing"
 	"bytes"
+	"github.com/stretchr/testify/assert"
 	"strings"
+	"testing"
 )
 
 var testArray = []string{"peach", "apple", "pear", "plum", "pineapple", "banana", "kiwi", "orange"}
@@ -71,6 +71,23 @@ func TestStream_Except(t *testing.T) {
 	assert.Equal(t, "apple", stream.First())
 }
 
+func TestStream_FirstAndLast(t *testing.T) {
+	stream := From(testArray)
+	emptyStream := From([]string{})
+
+	assert.Equal(t, 8, stream.Count())
+	assert.Equal(t, "peach", stream.First())
+	assert.Equal(t, "peach", stream.FirstOrDefault("some-value"))
+	assert.Equal(t, "orange", stream.Last())
+	assert.Equal(t, "orange", stream.LastOrDefault("some-value"))
+
+	assert.Equal(t, 0, emptyStream.Count())
+	assert.Nil(t, emptyStream.First())
+	assert.Equal(t, "some-value", emptyStream.FirstOrDefault("some-value"))
+	assert.Nil(t, emptyStream.Last())
+	assert.Equal(t, "some-value", emptyStream.LastOrDefault("some-value"))
+}
+
 func TestStream_Map(t *testing.T) {
 	mapFunc := func(i interface{}) interface{} {
 		return 5
@@ -105,6 +122,17 @@ func TestStream_OrderBy(t *testing.T) {
 
 	expected := []string{"apple", "banana", "kiwi", "orange", "peach", "pear", "pineapple", "plum"}
 	sorted := From(testArray).OrderBy(sortFn).ToArray().([]string)
+
+	assert.Equal(t, expected, sorted)
+}
+
+func TestStream_OrderByDesc(t *testing.T) {
+	sortFn := func(a interface{}, b interface{}) int {
+		return strings.Compare(a.(string), b.(string))
+	}
+
+	expected := []string{"plum", "pineapple", "pear", "peach", "orange", "kiwi", "banana", "apple"}
+	sorted := From(testArray).OrderBy(sortFn, true).ToArray().([]string)
 
 	assert.Equal(t, expected, sorted)
 }
