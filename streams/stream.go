@@ -69,50 +69,40 @@ func (s *Stream) Map(f func(interface{}) interface{}) *Stream {
 }
 
 // Returns the first element of the resulting stream. Nil if the resulting stream is empty.
-func (s *Stream) First() interface{} {
-	return s.At(0)
-}
-
-// Attempts to get the first element of the resulting stream, if nil, returns the given default value.
-func (s *Stream) FirstOrDefault(defaultValue interface{}) interface{} {
-	return s.AtOrDefault(0, defaultValue)
+func (s *Stream) First(defaultValue ...interface{}) interface{} {
+	return s.At(0, defaultValue...)
 }
 
 // Returns the last element of the resulting stream. Nil if the resulting stream is empty.
-func (s *Stream) Last() interface{} {
-	return s.AtReverse(0)
-}
-
-func (s *Stream) LastOrDefault(defaultValue interface{}) interface{} {
-	return s.AtReverseOrDefault(0, defaultValue)
+func (s *Stream) Last(defaultValue ...interface{}) interface{} {
+	return s.AtReverse(0, defaultValue...)
 }
 
 // Returns the element at the given index in the resulting stream.
-// Returns nil if out of bounds.
-func (s *Stream) At(index int) interface{} {
+// Returns nil (or default value if provided) if out of bounds.
+func (s *Stream) At(index int, defaultValue ...interface{}) interface{} {
 	if filtered := s.start(); filtered.Len() > index {
 		return filtered.Index(index).Interface()
 	}
-	return nil
-}
-
-// Returns the element at the given index in the resulting stream.
-// If the value is nil or out of bounds, returns the given defaultValue.
-func (s *Stream) AtOrDefault(index int, defaultValue interface{}) interface{} {
-	if val := s.At(index); val != nil {
-		return val
+	if len(defaultValue) > 0 {
+		return defaultValue[0]
 	}
-	return defaultValue
+
+	return nil
 }
 
 // Returns the element at the given position, starting from the last element to the first in the resulting stream.
 // Returns Nil if out of bounds.
-func (s *Stream) AtReverse(pos int) interface{} {
+func (s *Stream) AtReverse(pos int, defaultValue ...interface{}) interface{} {
 	filtered := s.start()
 	i := filtered.Len() - 1 - pos
 
 	if i >= 0 {
 		return filtered.Index(i).Interface()
+	}
+
+	if len(defaultValue) > 0 {
+		return defaultValue[0]
 	}
 
 	return nil
