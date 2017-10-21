@@ -11,6 +11,18 @@ import (
 
 var testArray = []string{"peach", "apple", "pear", "plum", "pineapple", "banana", "kiwi", "orange"}
 
+func TestSample(t *testing.T) {
+	result :=
+		From(testArray).
+			Filter(func(v interface{}) bool {
+				return strings.HasPrefix(v.(string), "p")
+			}).
+			ToArray().([]string)
+
+	for _, v := range result {
+		println(v)
+	}
+}
 func TestStream_Contains(t *testing.T) {
 	contains := From(testArray).Contains("apple")
 	assert.True(t, contains)
