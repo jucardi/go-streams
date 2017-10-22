@@ -9,7 +9,7 @@ import (
 )
 
 type Stream struct {
-	collection ICollection
+	iterable   IIterable
 	filters    []func(interface{}) bool
 	exceptions []func(interface{}) bool
 	sorts      []sortFunc
@@ -22,30 +22,30 @@ type sortFunc struct {
 }
 
 type sorter struct {
-	collection ICollection
-	sorts      []sortFunc
+	array interface{}
+	sorts []sortFunc
 }
 
-// From: Creates a Stream from a given collection or ICollection.
+// From: Creates a Stream from a given iterable or ICollection.
 //
-// - collection: The collection or ICollection to be used to create the stream
+// - iterable: The iterable or ICollection to be used to create the stream
 // - threads:    If provided, enables parallel filtering for all filter operations. Indicates the amount of go channels
 //               to be used to a maximum of the available CPUs in the host machine. <= 0 indicates the maximum amount of
 //               available CPUs will be the number that determines the amount of go channels to be used. If order matters,
 //               best combine it with a `SortBy`. Only needs to be provided once per stream.
 func From(collection interface{}, threads ...int) *Stream {
-	colReflectType := reflect.TypeOf((*ICollection)(nil)).Elem()
+	colReflectType := reflect.TypeOf((*IIterable)(nil)).Elem()
 
 	if reflect.PtrTo(reflect.TypeOf(collection)).Implements(colReflectType) {
-		return FromCollection(collection.(ICollection), threads...)
+		return FromCollection(collection.(IIterable), threads...)
 	}
 
 	return FromArray(collection, threads...)
 }
 
-// From: Creates a Stream from a given collection.
+// From: Creates a Stream from a given iterable.
 //
-// - collection:   The collection to be used to create the stream
+// - iterable:   The iterable to be used to create the stream
 // - threads: If provided, enables parallel filtering for all filter operations. Indicates the amount of go channels
 //            to be used to a maximum of the available CPUs in the host machine. <= 0 indicates the maximum amount of
 //            available CPUs will be the number that determines the amount of go channels to be used. If order matters,
@@ -56,15 +56,15 @@ func FromArray(array interface{}, threads ...int) *Stream {
 
 // From: Creates a Stream from a given ICollection.
 //
-// - collection: The ICollection to be used to create the stream
+// - iterable: The ICollection to be used to create the stream
 // - threads:    If provided, enables parallel filtering for all filter operations. Indicates the amount of go channels
 //               to be used to a maximum of the available CPUs in the host machine. <= 0 indicates the maximum amount of
 //               available CPUs will be the number that determines the amount of go channels to be used. If order matters,
 //               best combine it with a `SortBy`. Only needs to be provided once per stream.
-func FromCollection(collection ICollection, threads ...int) *Stream {
+func FromCollection(iterable IIterable, threads ...int) *Stream {
 	return &Stream{
-		collection: collection,
-		threads:    getCores(threads...),
+		iterable: iterable,
+		threads:  getCores(threads...),
 	}
 }
 
@@ -102,12 +102,19 @@ func (s *Stream) Except(f func(interface{}) bool, threads ...int) *Stream {
 	return s
 }
 
-// Map: Maps the elements of the collection to a new element, using the mapping function provided
-func (s *Stream) Map(f func(interface{}) interface{}) *Stream {
-	iterable := s.start()
+// Map: Maps the elements of the iterable to a new element, using the mapping function provided
+//
+// - f:       The filtering function to be used.
+// - threads: If provided, enables parallel filtering for all filter operations. Indicates the amount of go channels
+//            to be used to a maximum of the available CPUs in the host machine. <= 0 indicates the maximum amount of
+//            available CPUs will be the number that determines the amount of go channels to be used. If order matters,
+//            best combine it with a `SortBy`. Only needs to be provided once per stream.
+func (s *Stream) Map(f func(interface{}) interface{}, threads ...int) *Stream {
+	iterable := s.process()
 	var col ICollection
 
-	for old := iterable.Current(); iterable.HasNext(); old = iterable.Next() {
+	iterator := iterable.Iterator()
+	for old := iterator.Current(); iterator.HasNext(); old = iterator.Next() {
 		n := f(old)
 
 		if col == nil {
@@ -133,10 +140,10 @@ func (s *Stream) Last(defaultValue ...interface{}) interface{} {
 // At: Returns the element at the given index in the resulting stream.
 // Returns nil (or default value if provided) if out of bounds.
 func (s *Stream) At(index int, defaultValue ...interface{}) interface{} {
-	filtered := s.start()
-	filtered.Skip(index)
+	iterator := s.process().Iterator()
+	iterator.Skip(index)
 
-	if val := filtered.Current(); val == nil && len(defaultValue) > 0 {
+	if val := iterator.Current(); val == nil && len(defaultValue) > 0 {
 		return defaultValue[0]
 	} else {
 		return val
@@ -146,11 +153,15 @@ func (s *Stream) At(index int, defaultValue ...interface{}) interface{} {
 // AtReverse: Returns the element at the given position, starting from the last element to the first in the resulting stream.
 // Returns Nil if out of bounds.
 func (s *Stream) AtReverse(pos int, defaultValue ...interface{}) interface{} {
-	filtered := s.start()
-	i := filtered.Len() - 1 - pos
+	// TODO: Return error if Len is unavailable
+	iterable := s.process()
+	iterator := iterable.Iterator()
+
+	i := iterable.Len() - 1 - pos
 
 	if i >= 0 {
-		return filtered.Index(i)
+		iterator.Skip(i)
+		return iterator.Current()
 	}
 
 	if len(defaultValue) > 0 {
@@ -162,23 +173,36 @@ func (s *Stream) AtReverse(pos int, defaultValue ...interface{}) interface{} {
 
 // Count: Counts the elements of the resulting stream
 func (s *Stream) Count() int {
-	return s.start().Len()
+	iterable := s.process()
+
+	if iterable.Len() >= 0 {
+		return iterable.Len()
+	}
+
+	iterator := iterable.Iterator()
+	size := 0
+
+	for ; iterator.HasNext(); iterator.Next() {
+		size++
+	}
+
+	return size
 }
 
 // AnyMatch: Indicates whether any elements of the stream match the given condition function
 //
 // - f:       The matching function to be used.
 func (s *Stream) AnyMatch(f func(interface{}) bool) bool {
-	array := s.start()
-	return anyMatch(array, 0, array.Len(), []func(interface{}) bool{f}, false)
+	iterable := s.process()
+	return anyMatch(iterable, 0, iterable.Len(), []func(interface{}) bool{f}, false)
 }
 
 // AllMatch: Indicates whether ALL elements of the stream match the given condition function
 //
 // - f:       The matching function to be used.
 func (s *Stream) AllMatch(f func(interface{}) bool) bool {
-	array := s.start()
-	return !anyMatch(array, 0, array.Len(), []func(interface{}) bool{f}, true)
+	iterable := s.process()
+	return !anyMatch(iterable, 0, iterable.Len(), []func(interface{}) bool{f}, true)
 }
 
 // NoneMatch:  Indicates whether NONE of elements of the stream match the given condition function.
@@ -199,10 +223,10 @@ func (s *Stream) Contains(value interface{}) bool {
 
 // ForEach: Iterates over all elements in the stream calling the provided function.
 func (s *Stream) ForEach(f func(interface{})) {
-	array := s.start()
+	iterable := s.process()
+	iterator := iterable.Iterator()
 
-	for i := 0; i < array.Len(); i++ {
-		val := array.Index(i)
+	for val := iterator.Current(); iterator.HasNext(); val = iterator.Next() {
 		f(val)
 	}
 }
@@ -218,20 +242,25 @@ func (s *Stream) ForEach(f func(interface{})) {
 func (s *Stream) ParallelForEach(f func(interface{}), threads int, skipWait ...bool) {
 	var wg sync.WaitGroup
 	cores := getCores(threads)
-	array := s.start()
+	iterable := s.process()
 
-	if array.Len() < cores {
-		cores = array.Len()
+	if iterable.Len() < cores {
+		cores = iterable.Len()
 	}
 
 	worker := func(start, end int) {
 		defer wg.Done()
-		for i := start; i < end && i < array.Len(); i++ {
-			f(array.Index(i))
+		iterator := iterable.Iterator()
+		iterator.Skip(start)
+		i := start
+
+		for val := iterator.Current(); iterator.HasNext() && i < end; val = iterator.Next() {
+			i++
+			f(val)
 		}
 	}
 
-	sliceSize := int(math.Ceil(float64(array.Len()) / float64(cores)))
+	sliceSize := int(math.Ceil(float64(iterable.Len()) / float64(cores)))
 
 	wg.Add(cores)
 
@@ -244,9 +273,9 @@ func (s *Stream) ParallelForEach(f func(interface{}), threads int, skipWait ...b
 	}
 }
 
-// ToArray: Converts the resulting stream back to an collection
+// ToArray: Converts the resulting stream back to an iterable
 func (s *Stream) ToArray() interface{} {
-	return s.start().ToArray()
+	return s.process().ToArray()
 }
 
 // OrderBy: Sorts the elements ascending in the stream using the provided comparable function.
@@ -275,35 +304,35 @@ func (s *Stream) ThenBy(f func(interface{}, interface{}) int, desc ...bool) *Str
 	return s
 }
 
-func (s *Stream) start() ICollection {
+func (s *Stream) process() IIterable {
 	if s.threads != 1 {
-		return s.parallelStart(s.threads)
+		return s.parallelProcess(s.threads)
 	}
 
-	var array = s.collection
+	var array = s.iterable
 	array = s.filter(array)
 	array = s.except(array)
 	array = s.sort(array)
 	return array
 }
 
-func (s *Stream) parallelStart(threads int) ICollection {
-	var array = s.collection
-	array = s.parallelStartHandler(array, threads)
+func (s *Stream) parallelProcess(threads int) IIterable {
+	var array = s.iterable
+	array = s.parallelProcessHandler(array, threads)
 	array = s.sort(array)
 	return array
 }
 
-func (s *Stream) filter(array ICollection) ICollection {
+func (s *Stream) filter(array IIterable) IIterable {
 	return filterHandler(array, 0, array.Len(), s.filters, false)
 }
 
-func (s *Stream) except(array ICollection) ICollection {
+func (s *Stream) except(array IIterable) IIterable {
 	return filterHandler(array, 0, array.Len(), s.exceptions, true)
 }
 
-func (s *Stream) parallelStartHandler(array ICollection, threads int) ICollection {
-	worker := func(result chan ICollection, start, end int) {
+func (s *Stream) parallelProcessHandler(array IIterable, threads int) IIterable {
+	worker := func(result chan IIterable, start, end int) {
 		slice := filterHandler(array, start, end, s.filters, false)
 		result <- filterHandler(slice, 0, slice.Len(), s.exceptions, true)
 	}
@@ -311,18 +340,18 @@ func (s *Stream) parallelStartHandler(array ICollection, threads int) ICollectio
 	return parallelHandler(array, threads, worker)
 }
 
-func (s *Stream) sort(array ICollection) ICollection {
+func (s *Stream) sort(iterable IIterable) IIterable {
 	if len(s.sorts) == 0 {
-		return array
+		return iterable
 	}
 
 	so := sorter{
-		collection: array,
-		sorts:      s.sorts,
+		array: iterable.ToArray(),
+		sorts: s.sorts,
 	}
 
-	sort.Slice(so.collection.ToArray(), so.makeLessFunc())
-	return so.collection
+	sort.Slice(so.array, so.makeLessFunc())
+	return NewCollectionFromArray(so.array)
 }
 
 func (s *Stream) updateCores(threads ...int) int {
@@ -338,7 +367,8 @@ func (s *sorter) makeLessFunc() func(i, j int) bool {
 
 		for i := 0; val == 0 && i < len(s.sorts); i++ {
 			sorter := s.sorts[i]
-			val = sorter.fn(s.collection.Index(x), s.collection.Index(y))
+			arr := reflect.ValueOf(s.array)
+			val = sorter.fn(arr.Index(x).Interface(), arr.Index(y).Interface())
 
 			if sorter.desc {
 				val = val * -1
@@ -349,15 +379,17 @@ func (s *sorter) makeLessFunc() func(i, j int) bool {
 	}
 }
 
-func filterHandler(col ICollection, start, end int, filters []func(interface{}) bool, negate bool) ICollection {
+func filterHandler(iterable IIterable, start, end int, filters []func(interface{}) bool, negate bool) IIterable {
 	if len(filters) == 0 {
-		return col
+		return iterable
 	}
 
-	ret := NewCollection(col.ElementType())
+	ret := NewCollection(iterable.ElementType())
+	iterator := iterable.Iterator().Skip(start)
+	i := start
 
-	for i := start; i < end; i++ {
-		x := col.Index(i)
+	for x := iterator.Current(); iterator.HasNext() && i < end; x = iterator.Next() {
+		i++
 		var match bool = true
 
 		for _, f := range filters {
@@ -380,13 +412,15 @@ func filterHandler(col ICollection, start, end int, filters []func(interface{}) 
 	return ret
 }
 
-func anyMatch(col ICollection, start, end int, filters []func(interface{}) bool, negate bool) bool {
+func anyMatch(iterable IIterable, start, end int, filters []func(interface{}) bool, negate bool) bool {
 	if len(filters) == 0 {
 		return false
 	}
 
-	for i := start; i < end; i++ {
-		x := col.Index(i)
+	iterator := iterable.Iterator().Skip(start)
+	i := start
+
+	for x := iterator.Current(); iterator.HasNext() && i < end; x = iterator.Next() {
 		var match bool = true
 
 		for _, f := range filters {
@@ -409,23 +443,23 @@ func anyMatch(col ICollection, start, end int, filters []func(interface{}) bool,
 	return false
 }
 
-func parallelHandler(col ICollection, threads int, worker func(result chan ICollection, start, end int)) ICollection {
-	var ret ICollection = NewCollection(col.ElementType())
+func parallelHandler(iterable IIterable, threads int, worker func(result chan IIterable, start, end int)) IIterable {
+	var ret ICollection = NewCollection(iterable.ElementType())
 	cores := getCores(threads)
 
-	if col.Len() < cores {
-		cores = col.Len()
+	if iterable.Len() < cores {
+		cores = iterable.Len()
 	}
 
-	sliceSize := int(math.Ceil(float64(col.Len()) / float64(cores)))
-	c := make(chan ICollection, cores)
+	sliceSize := int(math.Ceil(float64(iterable.Len()) / float64(cores)))
+	c := make(chan IIterable, cores)
 
 	for i := 0; i < cores; i++ {
 		go worker(c, i*sliceSize, (i+1)*sliceSize)
 	}
 
 	for i := 0; i < cores; i++ {
-		ret.AddCollection(<-c)
+		ret.AddAll(<-c)
 	}
 
 	return ret

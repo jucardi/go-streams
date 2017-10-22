@@ -11,16 +11,21 @@ var (
 
 type genericArrayCollection struct {
 	reflect.Value
+	elementType reflect.Type
+}
+
+type genericArrayIterator struct {
+	col          *genericArrayCollection
 	elementType  reflect.Type
 	currentIndex int
 }
 
-// Creates a new ICollection from the given collection. Panics if the provided interface is not an collection or slice.
+// Creates a new ICollection from the given iterable. Panics if the provided interface is not an iterable or slice.
 func NewCollectionFromArray(array interface{}) ICollection {
 	arrayType := reflect.TypeOf(array)
 
 	if arrayType.Kind() != reflect.Slice && arrayType.Kind() != reflect.Array {
-		panic("Unable to create collection from a none Slice or none Array")
+		panic("Unable to create iterable from a none Slice or none Array")
 	}
 
 	return &genericArrayCollection{
@@ -29,7 +34,7 @@ func NewCollectionFromArray(array interface{}) ICollection {
 	}
 }
 
-// Creates a new empty collection of the given type
+// Creates a new empty iterable of the given type
 func NewCollection(elementType reflect.Type) ICollection {
 	return &genericArrayCollection{
 		Value:       reflect.MakeSlice(reflect.SliceOf(elementType), 0, 0),
@@ -53,51 +58,65 @@ func (g *genericArrayCollection) Add(item interface{}) error {
 	return nil
 }
 
-// AddCollection: Appends another collection into this ICollection instance.
-func (g *genericArrayCollection) AddCollection(slice ICollection) {
+// AddAll: Appends another iterable into this ICollection instance.
+func (g *genericArrayCollection) AddAll(slice IIterable) {
 	g.Value = reflect.AppendSlice(g.Value, reflect.ValueOf(slice.ToArray()))
 }
 
-// ElementType: Returns the type of the elements in the collection
+// ElementType: Returns the type of the elements in the iterable
 func (g *genericArrayCollection) ElementType() reflect.Type {
 	return g.elementType
 }
 
-// Retrieves the current element of the iterator
-func (g *genericArrayCollection) Current() interface{} {
-	if g.currentIndex >= g.Len() {
-		return nil
+func (g *genericArrayCollection) Iterator() IIterator {
+	return &genericArrayIterator{
+		col:         g,
+		elementType: g.elementType,
 	}
-
-	return g.Index(g.currentIndex)
 }
 
-// Indicates whether the collection has a next
-func (g *genericArrayCollection) HasNext() bool {
-	return g.Len()-1 >= g.currentIndex
-}
-
-// Moves to the next position and indicates whether the collection has a next element and returns the next element if so
-func (g *genericArrayCollection) Next() interface{} {
-	g.currentIndex++
-
-	if g.currentIndex < 0 || g.currentIndex >= g.Len() {
-		return nil
-	}
-
-	return g.Index(g.currentIndex)
-}
-
-// Resents the iterator position to the beginning.
-func (g *genericArrayCollection) Reset() {
-	g.currentIndex = 0
-}
-
-// Skips the following N items
-func (g *genericArrayCollection) Skip(n int) {
-	g.currentIndex += n
+// ElementType: Returns the type of the elements in the iterable
+func (g *genericArrayIterator) ElementType() reflect.Type {
+	return g.elementType
 }
 
 func (g *genericArrayCollection) ToArray() interface{} {
 	return g.Value.Interface()
+}
+
+// Retrieves the current element of the iterator
+func (g *genericArrayIterator) Current() interface{} {
+	if g.currentIndex >= g.col.Len() {
+		return nil
+	}
+
+	return g.col.Index(g.currentIndex)
+}
+
+// Indicates whether the iterable has a next
+func (g *genericArrayIterator) HasNext() bool {
+	return g.col.Len()-1 >= g.currentIndex
+}
+
+// Moves to the next position and indicates whether the iterable has a next element and returns the next element if so
+func (g *genericArrayIterator) Next() interface{} {
+	g.currentIndex++
+
+	if g.currentIndex < 0 || g.currentIndex >= g.col.Len() {
+		return nil
+	}
+
+	return g.col.Index(g.currentIndex)
+}
+
+// Resents the iterator position to the beginning.
+func (g *genericArrayIterator) Reset() IIterator {
+	g.currentIndex = 0
+	return g
+}
+
+// Skips the following N items
+func (g *genericArrayIterator) Skip(n int) IIterator {
+	g.currentIndex += n
+	return g
 }
