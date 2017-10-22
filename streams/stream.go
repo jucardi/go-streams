@@ -10,6 +10,7 @@ import (
 
 type Stream struct {
 	previous *Stream
+	next     *Stream
 	iterable IIterable
 	filters  []func(interface{}) bool
 	mapper   func(interface{}) interface{}
@@ -325,6 +326,10 @@ func (s *Stream) ThenBy(f func(interface{}, interface{}) int, desc ...bool) *Str
 	return s
 }
 
+// #########################
+// #    Private methods    #
+// #########################
+
 func (s *Stream) process() IIterable {
 	if s.threads != 1 {
 		return s.parallelProcess(s.threads)
@@ -344,15 +349,62 @@ func (s *Stream) parallelProcess(threads int) IIterable {
 }
 
 func (s *Stream) filter(iterable IIterable) IIterable {
-	return filterHandler(iterable, 0, iterable.Len(), s.filters)
+	return s.filterHandler(iterable, 0, iterable.Len())
+}
+
+func (s *Stream) filterHandler(iterable IIterable, start, end int) IIterable {
+	if len(s.filters) == 0 {
+		return iterable
+	}
+
+	ret := NewCollection(iterable.ElementType())
+	iterator := iterable.Iterator().Skip(start)
+	i := start
+
+	for x := iterator.Current(); iterator.HasNext() && i < end; x = iterator.Next() {
+		i++
+		var match bool = true
+
+		for _, f := range s.filters {
+			match = match && f(x)
+
+			if !match {
+				break
+			}
+		}
+
+		if match {
+			ret.Add(x)
+		}
+	}
+
+	return ret
 }
 
 func (s *Stream) parallelProcessHandler(iterable IIterable, threads int) IIterable {
 	worker := func(result chan IIterable, start, end int) {
-		result <- filterHandler(iterable, start, end, s.filters)
+		result <- s.filterHandler(iterable, start, end)
 	}
 
-	return parallelHandler(iterable, threads, worker)
+	ret := NewCollection(iterable.ElementType())
+	cores := getCores(threads)
+
+	if iterable.Len() < cores {
+		cores = iterable.Len()
+	}
+
+	sliceSize := int(math.Ceil(float64(iterable.Len()) / float64(cores)))
+	c := make(chan IIterable, cores)
+
+	for i := 0; i < cores; i++ {
+		go worker(c, i*sliceSize, (i+1)*sliceSize)
+	}
+
+	for i := 0; i < cores; i++ {
+		ret.AddAll(<-c)
+	}
+
+	return ret
 }
 
 func (s *Stream) sort(iterable IIterable) IIterable {
@@ -394,35 +446,6 @@ func (s *sorter) makeLessFunc() func(i, j int) bool {
 	}
 }
 
-func filterHandler(iterable IIterable, start, end int, filters []func(interface{}) bool) IIterable {
-	if len(filters) == 0 {
-		return iterable
-	}
-
-	ret := NewCollection(iterable.ElementType())
-	iterator := iterable.Iterator().Skip(start)
-	i := start
-
-	for x := iterator.Current(); iterator.HasNext() && i < end; x = iterator.Next() {
-		i++
-		var match bool = true
-
-		for _, f := range filters {
-			match = match && f(x)
-
-			if !match {
-				break
-			}
-		}
-
-		if match {
-			ret.Add(x)
-		}
-	}
-
-	return ret
-}
-
 func anyMatch(iterable IIterable, start, end int, f func(interface{}) bool, negate bool) bool {
 	iterator := iterable.Iterator().Skip(start)
 	i := start
@@ -442,28 +465,6 @@ func anyMatch(iterable IIterable, start, end int, f func(interface{}) bool, nega
 	}
 
 	return false
-}
-
-func parallelHandler(iterable IIterable, threads int, worker func(result chan IIterable, start, end int)) IIterable {
-	var ret ICollection = NewCollection(iterable.ElementType())
-	cores := getCores(threads)
-
-	if iterable.Len() < cores {
-		cores = iterable.Len()
-	}
-
-	sliceSize := int(math.Ceil(float64(iterable.Len()) / float64(cores)))
-	c := make(chan IIterable, cores)
-
-	for i := 0; i < cores; i++ {
-		go worker(c, i*sliceSize, (i+1)*sliceSize)
-	}
-
-	for i := 0; i < cores; i++ {
-		ret.AddAll(<-c)
-	}
-
-	return ret
 }
 
 func getCores(threads ...int) int {
