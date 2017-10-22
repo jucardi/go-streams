@@ -9,13 +9,12 @@ import (
 )
 
 type Stream struct {
-	previous   *Stream
-	iterable   IIterable
-	filters    []func(interface{}) bool
-	exceptions []func(interface{}) bool
-	mapper     func(interface{}) interface{}
-	sorts      []sortFunc
-	threads    int
+	previous *Stream
+	iterable IIterable
+	filters  []func(interface{}) bool
+	mapper   func(interface{}) interface{}
+	sorts    []sortFunc
+	threads  int
 }
 
 type sortFunc struct {
@@ -100,7 +99,7 @@ func (s *Stream) Filter(f func(interface{}) bool, threads ...int) *Stream {
 //            best combine it with a `SortBy`. Only needs to be provided once per stream.
 func (s *Stream) Except(f func(interface{}) bool, threads ...int) *Stream {
 	s.updateCores(threads...)
-	s.exceptions = append(s.exceptions, f)
+	s.filters = append(s.filters, func(x interface{}) bool { return !f(x) })
 	return s
 }
 
@@ -196,7 +195,7 @@ func (s *Stream) Count() int {
 // - f:       The matching function to be used.
 func (s *Stream) AnyMatch(f func(interface{}) bool) bool {
 	iterable := s.process()
-	return anyMatch(iterable, 0, iterable.Len(), []func(interface{}) bool{f}, false)
+	return anyMatch(iterable, 0, iterable.Len(), f, false)
 }
 
 // AllMatch: Indicates whether ALL elements of the stream match the given condition function
@@ -204,7 +203,7 @@ func (s *Stream) AnyMatch(f func(interface{}) bool) bool {
 // - f:       The matching function to be used.
 func (s *Stream) AllMatch(f func(interface{}) bool) bool {
 	iterable := s.process()
-	return !anyMatch(iterable, 0, iterable.Len(), []func(interface{}) bool{f}, true)
+	return !anyMatch(iterable, 0, iterable.Len(), f, true)
 }
 
 // NoneMatch:  Indicates whether NONE of elements of the stream match the given condition function.
@@ -333,7 +332,6 @@ func (s *Stream) process() IIterable {
 
 	var iterable = s.iterable
 	iterable = s.filter(iterable)
-	iterable = s.except(iterable)
 	iterable = s.sort(iterable)
 	return iterable
 }
@@ -346,17 +344,12 @@ func (s *Stream) parallelProcess(threads int) IIterable {
 }
 
 func (s *Stream) filter(iterable IIterable) IIterable {
-	return filterHandler(iterable, 0, iterable.Len(), s.filters, false)
-}
-
-func (s *Stream) except(iterable IIterable) IIterable {
-	return filterHandler(iterable, 0, iterable.Len(), s.exceptions, true)
+	return filterHandler(iterable, 0, iterable.Len(), s.filters)
 }
 
 func (s *Stream) parallelProcessHandler(iterable IIterable, threads int) IIterable {
 	worker := func(result chan IIterable, start, end int) {
-		slice := filterHandler(iterable, start, end, s.filters, false)
-		result <- filterHandler(slice, 0, slice.Len(), s.exceptions, true)
+		result <- filterHandler(iterable, start, end, s.filters)
 	}
 
 	return parallelHandler(iterable, threads, worker)
@@ -401,7 +394,7 @@ func (s *sorter) makeLessFunc() func(i, j int) bool {
 	}
 }
 
-func filterHandler(iterable IIterable, start, end int, filters []func(interface{}) bool, negate bool) IIterable {
+func filterHandler(iterable IIterable, start, end int, filters []func(interface{}) bool) IIterable {
 	if len(filters) == 0 {
 		return iterable
 	}
@@ -415,11 +408,7 @@ func filterHandler(iterable IIterable, start, end int, filters []func(interface{
 		var match bool = true
 
 		for _, f := range filters {
-			if negate {
-				match = match && !f(x)
-			} else {
-				match = match && f(x)
-			}
+			match = match && f(x)
 
 			if !match {
 				break
@@ -434,27 +423,17 @@ func filterHandler(iterable IIterable, start, end int, filters []func(interface{
 	return ret
 }
 
-func anyMatch(iterable IIterable, start, end int, filters []func(interface{}) bool, negate bool) bool {
-	if len(filters) == 0 {
-		return false
-	}
-
+func anyMatch(iterable IIterable, start, end int, f func(interface{}) bool, negate bool) bool {
 	iterator := iterable.Iterator().Skip(start)
 	i := start
 
 	for x := iterator.Current(); iterator.HasNext() && i < end; x = iterator.Next() {
 		var match bool = true
 
-		for _, f := range filters {
-			if negate {
-				match = match && !f(x)
-			} else {
-				match = match && f(x)
-			}
-
-			if !match {
-				break
-			}
+		if negate {
+			match = match && !f(x)
+		} else {
+			match = match && f(x)
 		}
 
 		if match {
