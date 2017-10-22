@@ -9,9 +9,11 @@ import (
 )
 
 type Stream struct {
+	previous   *Stream
 	iterable   IIterable
 	filters    []func(interface{}) bool
 	exceptions []func(interface{}) bool
+	mapper     func(interface{}) interface{}
 	sorts      []sortFunc
 	threads    int
 }
@@ -273,9 +275,29 @@ func (s *Stream) ParallelForEach(f func(interface{}), threads int, skipWait ...b
 	}
 }
 
-// ToArray: Converts the resulting stream back to an iterable
+// ToArray: Returns an array of elements from the resulting stream
 func (s *Stream) ToArray() interface{} {
 	return s.process().ToArray()
+}
+
+// ToCollection: Returns a `ICollection` of elements from the resulting stream
+func (s *Stream) ToCollection() ICollection {
+	iterable := s.process()
+	colReflectType := reflect.TypeOf((*ICollection)(nil)).Elem()
+
+	if reflect.PtrTo(reflect.TypeOf(iterable)).Implements(colReflectType) {
+		return iterable.(ICollection)
+	}
+
+	ret := NewCollection(iterable.ElementType())
+	ret.AddAll(iterable)
+
+	return ret
+}
+
+// ToIterable: Returns a `IIterable` of elements from the resulting stream
+func (s *Stream) ToIterable() IIterable {
+	return s.process()
 }
 
 // OrderBy: Sorts the elements ascending in the stream using the provided comparable function.
@@ -309,35 +331,35 @@ func (s *Stream) process() IIterable {
 		return s.parallelProcess(s.threads)
 	}
 
-	var array = s.iterable
-	array = s.filter(array)
-	array = s.except(array)
-	array = s.sort(array)
-	return array
+	var iterable = s.iterable
+	iterable = s.filter(iterable)
+	iterable = s.except(iterable)
+	iterable = s.sort(iterable)
+	return iterable
 }
 
 func (s *Stream) parallelProcess(threads int) IIterable {
-	var array = s.iterable
-	array = s.parallelProcessHandler(array, threads)
-	array = s.sort(array)
-	return array
+	var iterable = s.iterable
+	iterable = s.parallelProcessHandler(iterable, threads)
+	iterable = s.sort(iterable)
+	return iterable
 }
 
-func (s *Stream) filter(array IIterable) IIterable {
-	return filterHandler(array, 0, array.Len(), s.filters, false)
+func (s *Stream) filter(iterable IIterable) IIterable {
+	return filterHandler(iterable, 0, iterable.Len(), s.filters, false)
 }
 
-func (s *Stream) except(array IIterable) IIterable {
-	return filterHandler(array, 0, array.Len(), s.exceptions, true)
+func (s *Stream) except(iterable IIterable) IIterable {
+	return filterHandler(iterable, 0, iterable.Len(), s.exceptions, true)
 }
 
-func (s *Stream) parallelProcessHandler(array IIterable, threads int) IIterable {
+func (s *Stream) parallelProcessHandler(iterable IIterable, threads int) IIterable {
 	worker := func(result chan IIterable, start, end int) {
-		slice := filterHandler(array, start, end, s.filters, false)
+		slice := filterHandler(iterable, start, end, s.filters, false)
 		result <- filterHandler(slice, 0, slice.Len(), s.exceptions, true)
 	}
 
-	return parallelHandler(array, threads, worker)
+	return parallelHandler(iterable, threads, worker)
 }
 
 func (s *Stream) sort(iterable IIterable) IIterable {
