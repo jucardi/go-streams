@@ -1,5 +1,5 @@
 # go-streams
-####Stream Collections for Go, inspired in Java 8 Streams and .NET Linq
+## Stream Collections for Go, inspired in Java 8 Streams and .NET Linq
 
 Provides structs to support functional-style operations on streams of elements, such as map-reduce transformations on collections, filtering, sorting and parallel foreach operations. For example:
 
@@ -35,7 +35,7 @@ Currently Streams can be obtain in two ways:
 
 **Streams specifically for basic types, such as `StringStream` or `IntStream` will be coming soon**
 
-###Stream operations and pipelines
+## Stream operations and pipelines
 
 Stream operations are divided into intermediate and terminal operations, and are combined to form stream pipelines. A stream pipeline consists of a source (such as a Collection, an array, a generator function, or an I/O channel); followed by zero or more intermediate operations such as Filter(), Exclude() or Sort() and a terminal operation such as ForEach() or First()
 
