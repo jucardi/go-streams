@@ -9,11 +9,8 @@ import (
 )
 
 type Stream struct {
-	previous *Stream
-	next     *Stream
 	iterable IIterable
 	filters  []func(interface{}) bool
-	mapper   func(interface{}) interface{}
 	sorts    []sortFunc
 	threads  int
 }
@@ -325,10 +322,6 @@ func (s *Stream) ThenBy(f func(interface{}, interface{}) int, desc ...bool) *Str
 	})
 	return s
 }
-
-// #########################
-// #    Private methods    #
-// #########################
 
 func (s *Stream) process() IIterable {
 	if s.threads != 1 {
