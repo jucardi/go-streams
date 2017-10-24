@@ -4,25 +4,73 @@ This library provides
 - structs to easily represent and manage collections and iterable of elements which size are not necessarily defined.
 - Stream structs to support functional-style operations on streams of elements, such as map-reduce transformations on collections, filtering, sorting, mapping, foreach parallel operations.
 
+##### Quick Start
 
-An example usage of a Stream:
+```bash
+go get github.com/jucardi/go-streams
+```
+
+##### Quick Overview
+
+Streams facilitate operations on arrays, iterables and collections, such as *filtering*, *sorting*, *mapping*, *foreach*, and parallel operations on the items contained by these arrays, iterables or collections
+
+**A quick example:**
+
+Given the following array
 
 ```Go
-// Given the following array
 var fruitArray = []string{"peach", "apple", "pear", "plum", "pineapple", "banana", "kiwi", "orange"}
-
-fruitsThatStartWithP := streams.
-    FromArray(testArray).                               // Creates a stream from the given array
-        Filter(func(v interface{}) bool {               // Applies the given function filter
-            return strings.HasPrefix(v.(string), "p")
-        }).
-        ToArray().([]string)                            // Converts back to an array
-
 ```
-The resulting array will be `{"peach", "pear", "plum", "pineapple"}`
+
+Let's obtain an array of only the elements that start with the letter "p"
+
+```go
+fruitsThatStartWithP := streams.
+
+	// Creates a stream from the given array
+	FromArray(testArray).
+
+	// Adds a filter for strings that start with 'p'
+	Filter(func(v interface{}) bool {
+		return strings.HasPrefix(v.(string), "p")
+	}).
+
+	// Orders alphabetically
+	OrderBy(func(a interface{}, b interface{}) int {
+		return strings.Compare(a.(string), b.(string))
+	}).
+
+	// Converts back to an array
+	ToArray().([]string)
+```
+The resulting array will be `{"peach", "pear", "pineapple", "plum"}`
 
 Here we use an array of string as the source of the stream, perform a filter operation provided by a function that receives
 a single element of the collection and determines whether the element should remain in the stream by returning a boolean.
+
+Now let's do a simple forach operation
+
+```go
+streams.
+	FromArray(testArray).
+	Filter(func(v interface{}) bool {
+		return strings.HasPrefix(v.(string), "p")
+	}).
+	ForEach(func(v interface) {
+		println(v)
+	})
+```
+
+In this example, once the stream processes the filter, performs a foreach operation with the result. With this operation we'll obtain the following output in the console
+
+```
+peach
+pear
+plum
+pineaple
+```
+
+## About the go-streams
 
 The characteristics of a Stream are inspired in the stream features provided by Java 8. The following characteristics apply
 in the go-streams.
