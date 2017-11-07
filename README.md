@@ -28,7 +28,7 @@ Let's obtain an array of only the elements that start with the letter "p"
 fruitsThatStartWithP := streams.
 
 	// Creates a stream from the given array
-	FromArray(fruitsThatStartWithP).
+	FromArray(fruitArray).
 
 	// Adds a filter for strings that start with 'p'
 	Filter(func(v interface{}) bool {
@@ -52,7 +52,7 @@ Now let's do a simple forach operation
 
 ```go
 streams.
-	FromArray(fruitsThatStartWithP).
+	FromArray(fruitArray).
 	Filter(func(v interface{}) bool {
 		return strings.HasPrefix(v.(string), "p")
 	}).
