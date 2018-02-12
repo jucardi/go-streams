@@ -14,14 +14,14 @@ var testArray = []string{"peach", "apple", "pear", "plum", "pineapple", "banana"
 func TestSample(t *testing.T) {
 	From(testArray).
 		Filter(func(v interface{}) bool {
-		return strings.HasPrefix(v.(string), "p")
-	}).
+			return strings.HasPrefix(v.(string), "p")
+		}).
 		OrderBy(func(a interface{}, b interface{}) int {
-		return strings.Compare(a.(string), b.(string))
-	}).
+			return strings.Compare(a.(string), b.(string))
+		}).
 		ForEach(func(x interface{}) {
-		println(x.(string))
-	})
+			println(x.(string))
+		})
 }
 
 func TestStream_Contains(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 )
 
 var (
+	// ErrorWrongType is returned when the wrong type of object is passed
 	ErrorWrongType = errors.New("wrong type")
 )
 
@@ -20,7 +21,7 @@ type genericArrayIterator struct {
 	currentIndex int
 }
 
-// Creates a new ICollection from the given iterable. Panics if the provided interface is not an iterable or slice.
+// NewCollectionFromArray Creates a new ICollection from the given iterable. Panics if the provided interface is not an iterable or slice.
 func NewCollectionFromArray(array interface{}) ICollection {
 	arrayType := reflect.TypeOf(array)
 
@@ -34,7 +35,7 @@ func NewCollectionFromArray(array interface{}) ICollection {
 	}
 }
 
-// Creates a new empty iterable of the given type
+// NewCollection Creates a new empty iterable of the given type
 func NewCollection(elementType reflect.Type) ICollection {
 	return &genericArrayCollection{
 		Value:       reflect.MakeSlice(reflect.SliceOf(elementType), 0, 0),

@@ -25,7 +25,7 @@ type sorter struct {
 	sorts []sortFunc
 }
 
-// From: Creates a Stream from a given iterable or ICollection.
+// From Creates a Stream from a given iterable or ICollection.
 //
 // - iterable: The iterable or ICollection to be used to create the stream
 // - threads:    If provided, enables parallel filtering for all filter operations. Indicates the amount of go channels
@@ -42,7 +42,7 @@ func From(collection interface{}, threads ...int) *Stream {
 	return FromArray(collection, threads...)
 }
 
-// From: Creates a Stream from a given iterable.
+// FromArray Creates a Stream from a given array.
 //
 // - iterable:   The iterable to be used to create the stream
 // - threads: If provided, enables parallel filtering for all filter operations. Indicates the amount of go channels
@@ -53,7 +53,7 @@ func FromArray(array interface{}, threads ...int) *Stream {
 	return FromIterable(NewCollectionFromArray(array), threads...)
 }
 
-// From: Creates a Stream from a given IIterable.
+// FromIterable Creates a Stream from a given IIterable.
 //
 // - iterable: The ICollection to be used to create the stream
 // - threads:    If provided, enables parallel filtering for all filter operations. Indicates the amount of go channels
@@ -67,7 +67,7 @@ func FromIterable(iterable IIterable, threads ...int) *Stream {
 	}
 }
 
-// SetThreads: Sets the amount of go channels to be used for parallel filtering to a maximum of the available CPUs in the
+// SetThreads Sets the amount of go channels to be used for parallel filtering to a maximum of the available CPUs in the
 // host machine. Providing a value <= 0, indicates the maximum amount of available CPUs will be the number that determines
 // the amount of go channels to be used. If order matters, best combine it with a `SortBy`. Only needs to be provided once
 // per stream.
@@ -75,7 +75,7 @@ func (s *Stream) SetThreads(threads int) int {
 	return s.updateCores(threads)
 }
 
-// Filter: Filters any element that does not meet the condition provided by the function.
+// Filter Filters any element that does not meet the condition provided by the function.
 //
 // - f:       The filtering function to be used.
 // - threads: If provided, enables parallel filtering for all filter operations. Indicates the amount of go channels
@@ -88,7 +88,7 @@ func (s *Stream) Filter(f func(interface{}) bool, threads ...int) *Stream {
 	return s
 }
 
-// Except: Filters all elements that meet the condition provided by the function.
+// Except Filters all elements that meet the condition provided by the function.
 //
 // - f:       The filtering function to be used.
 // - threads: If provided, enables parallel filtering for all filter operations. Indicates the amount of go channels
@@ -101,7 +101,7 @@ func (s *Stream) Except(f func(interface{}) bool, threads ...int) *Stream {
 	return s
 }
 
-// Map: Maps the elements of the iterable to a new element, using the mapping function provided
+// Map Maps the elements of the iterable to a new element, using the mapping function provided
 //
 // - f:       The filtering function to be used.
 // - threads: If provided, enables parallel filtering for all filter operations. Indicates the amount of go channels
@@ -126,32 +126,32 @@ func (s *Stream) Map(f func(interface{}) interface{}, threads ...int) *Stream {
 	return FromIterable(col)
 }
 
-// First: Returns the first element of the resulting stream.
+// First Returns the first element of the resulting stream.
 // Returns nil (or default value if provided) if the resulting stream is empty.
 func (s *Stream) First(defaultValue ...interface{}) interface{} {
 	return s.At(0, defaultValue...)
 }
 
-// Last: Returns the last element of the resulting stream.
+// Last Returns the last element of the resulting stream.
 // Returns nil (or default value if provided) if the resulting stream is empty.
 func (s *Stream) Last(defaultValue ...interface{}) interface{} {
 	return s.AtReverse(0, defaultValue...)
 }
 
-// At: Returns the element at the given index in the resulting stream.
+// At Returns the element at the given index in the resulting stream.
 // Returns nil (or default value if provided) if out of bounds.
 func (s *Stream) At(index int, defaultValue ...interface{}) interface{} {
 	iterator := s.process().Iterator()
 	iterator.Skip(index)
 
-	if val := iterator.Current(); val == nil && len(defaultValue) > 0 {
+	val := iterator.Current()
+	if val == nil && len(defaultValue) > 0 {
 		return defaultValue[0]
-	} else {
-		return val
 	}
+	return val
 }
 
-// AtReverse: Returns the element at the given position, starting from the last element to the first in the resulting stream.
+// AtReverse Returns the element at the given position, starting from the last element to the first in the resulting stream.
 // Returns nil (or default value if provided) if out of bounds.
 func (s *Stream) AtReverse(pos int, defaultValue ...interface{}) interface{} {
 	// TODO: Return error if Len is unavailable
@@ -172,7 +172,7 @@ func (s *Stream) AtReverse(pos int, defaultValue ...interface{}) interface{} {
 	return nil
 }
 
-// Count: Counts the elements of the resulting stream
+// Count Counts the elements of the resulting stream
 func (s *Stream) Count() int {
 	iterable := s.process()
 
@@ -190,7 +190,7 @@ func (s *Stream) Count() int {
 	return size
 }
 
-// AnyMatch: Indicates whether any elements of the stream match the given condition function.
+// AnyMatch Indicates whether any elements of the stream match the given condition function.
 //
 // - f:       The matching function to be used.
 func (s *Stream) AnyMatch(f func(interface{}) bool) bool {
@@ -198,7 +198,7 @@ func (s *Stream) AnyMatch(f func(interface{}) bool) bool {
 	return anyMatch(iterable, 0, iterable.Len(), f, false)
 }
 
-// AllMatch: Indicates whether ALL elements of the stream match the given condition function
+// AllMatch Indicates whether ALL elements of the stream match the given condition function
 //
 // - f:       The matching function to be used.
 func (s *Stream) AllMatch(f func(interface{}) bool) bool {
@@ -206,14 +206,14 @@ func (s *Stream) AllMatch(f func(interface{}) bool) bool {
 	return !anyMatch(iterable, 0, iterable.Len(), f, true)
 }
 
-// NoneMatch:  Indicates whether NONE of elements of the stream match the given condition function.
+// NoneMatch Indicates whether NONE of elements of the stream match the given condition function.
 //
 // - f:       The matching function to be used.
 func (s *Stream) NoneMatch(f func(interface{}) bool) bool {
 	return !s.AnyMatch(f)
 }
 
-// Contains: Indicates whether the provided value matches any of the values in the stream
+// Contains Indicates whether the provided value matches any of the values in the stream
 //
 // - value:   The value to be found.
 func (s *Stream) Contains(value interface{}) bool {
@@ -222,7 +222,7 @@ func (s *Stream) Contains(value interface{}) bool {
 	})
 }
 
-// ForEach: Iterates over all elements in the stream calling the provided function.
+// ForEach Iterates over all elements in the stream calling the provided function.
 func (s *Stream) ForEach(f func(interface{})) {
 	iterable := s.process()
 	iterator := iterable.Iterator()
@@ -232,7 +232,7 @@ func (s *Stream) ForEach(f func(interface{})) {
 	}
 }
 
-// ParallelForEach: Iterates over all elements in the stream calling the provided function. Creates multiple go channels to parallelize
+// ParallelForEach Iterates over all elements in the stream calling the provided function. Creates multiple go channels to parallelize
 // the operation. ParallelForeach does not use any thread values previously provided in any filtering method nor enables parallel filtering
 // if any filtering is done prior to the `ParallelForEach` phase. Only use `ParallelForEach` if the order in which the elements are processed
 // does not matter, otherwise see `ForEach`.
@@ -274,12 +274,12 @@ func (s *Stream) ParallelForEach(f func(interface{}), threads int, skipWait ...b
 	}
 }
 
-// ToArray: Returns an array of elements from the resulting stream
+// ToArray Returns an array of elements from the resulting stream
 func (s *Stream) ToArray() interface{} {
 	return s.process().ToArray()
 }
 
-// ToCollection: Returns a `ICollection` of elements from the resulting stream
+// ToCollection Returns a `ICollection` of elements from the resulting stream
 func (s *Stream) ToCollection() ICollection {
 	iterable := s.process()
 	colReflectType := reflect.TypeOf((*ICollection)(nil)).Elem()
@@ -294,12 +294,12 @@ func (s *Stream) ToCollection() ICollection {
 	return ret
 }
 
-// ToIterable: Returns a `IIterable` of elements from the resulting stream
+// ToIterable Returns a `IIterable` of elements from the resulting stream
 func (s *Stream) ToIterable() IIterable {
 	return s.process()
 }
 
-// OrderBy: Sorts the elements in the stream using the provided comparable function.
+// OrderBy Sorts the elements in the stream using the provided comparable function.
 //
 // - desc:  indicates whether the sorting should be done descendant
 func (s *Stream) OrderBy(f func(interface{}, interface{}) int, desc ...bool) *Stream {
@@ -307,7 +307,7 @@ func (s *Stream) OrderBy(f func(interface{}, interface{}) int, desc ...bool) *St
 	return s.ThenBy(f, desc...)
 }
 
-// ThenBy: If two elements are considered equal after previously applying a comparable function,
+// ThenBy If two elements are considered equal after previously applying a comparable function,
 // attempts to sort ascending the 2 elements with an additional comparable function.
 //
 // - desc:  indicates whether the sorting should be done descendant
@@ -471,11 +471,11 @@ func getCores(threads ...int) int {
 
 	if maxCores < threads[0] || threads[0] <= 0 {
 		return maxCores
-	} else {
-		return threads[0]
 	}
+	return threads[0]
 }
 
+// TODO:
 // STREAM
 //   Distinct
 //   Reverse
