@@ -446,7 +446,7 @@ func anyMatch(iterable IIterable, start, end int, f func(interface{}) bool, nega
 	i := start
 
 	for x := iterator.Current(); iterator.HasNext() && i < end; x = iterator.Next() {
-		var match bool = true
+		match := true
 
 		if negate {
 			match = match && !f(x)
@@ -476,6 +476,7 @@ func getCores(threads ...int) int {
 }
 
 // TODO:
+//
 // STREAM
 //   Distinct
 //   Reverse
@@ -497,39 +498,3 @@ func getCores(threads ...int) int {
 //    GroupJoin
 //    Intersect    (default equals or with comparer function)
 //    Union
-//
-//
-//
-// =========== DONE =============
-//
-// STREAM
-//   Filter, Where     DONE
-//   Except            DONE
-//   Map               DONE
-//   OrderBy           DONE
-//   OrderByDescending DONE
-//   ThenBy            DONE
-//   ThenByDescending  DONE
-//
-// BOOLEAN
-//    AnyMatch, Any     DONE
-//    AllMatch, All     DONE
-//    NoneMatch         DONE
-//    Contains          DONE  -> Like Any, but instead of receiving a func, receives an element to perform an equals operation
-//
-// INT
-//    Count, Size       DONE
-//
-// ELEMENT
-//    FindFirst, First   DONE
-//    ElementAt, At      DONE
-//    ElementAtOrDefault DONE
-//    AtOrDefault        DONE
-//    Last               DONE
-//    LastOrDefault      DONE
-//
-// VOID
-//    ForEach           DONE
-//
-// ARRAY
-//    ToArray           DONE
