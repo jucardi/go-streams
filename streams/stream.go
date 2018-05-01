@@ -8,6 +8,7 @@ import (
 	"sync"
 )
 
+// Stream represents the collection stream
 type Stream struct {
 	iterable IIterable
 	filters  []func(interface{}) bool
@@ -358,7 +359,7 @@ func (s *Stream) filterHandler(iterable IIterable, start, end int) IIterable {
 
 	for x := iterator.Current(); iterator.HasNext() && i < end; x = iterator.Next() {
 		i++
-		var match bool = true
+		match := true
 
 		for _, f := range s.filters {
 			match = match && f(x)

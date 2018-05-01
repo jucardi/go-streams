@@ -59,12 +59,12 @@ func (g *genericArrayCollection) Add(item interface{}) error {
 	return nil
 }
 
-// AddAll: Appends another iterable into this ICollection instance.
+// AddAll appends another iterable into this ICollection instance.
 func (g *genericArrayCollection) AddAll(slice IIterable) {
 	g.Value = reflect.AppendSlice(g.Value, reflect.ValueOf(slice.ToArray()))
 }
 
-// ElementType: Returns the type of the elements in the iterable
+// ElementType returns the type of the elements in the iterable
 func (g *genericArrayCollection) ElementType() reflect.Type {
 	return g.elementType
 }
@@ -76,7 +76,7 @@ func (g *genericArrayCollection) Iterator() IIterator {
 	}
 }
 
-// ElementType: Returns the type of the elements in the iterable
+// ElementType returns the type of the elements in the iterable
 func (g *genericArrayIterator) ElementType() reflect.Type {
 	return g.elementType
 }
