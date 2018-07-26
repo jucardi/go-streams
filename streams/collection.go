@@ -21,6 +21,11 @@ type genericArrayIterator struct {
 	currentIndex int
 }
 
+type MapEntry struct {
+	Key   interface{}
+	Value interface{}
+}
+
 // NewCollectionFromArray Creates a new ICollection from the given iterable. Panics if the provided interface is not an iterable or slice.
 func NewCollectionFromArray(array interface{}) ICollection {
 	arrayType := reflect.TypeOf(array)
@@ -33,6 +38,25 @@ func NewCollectionFromArray(array interface{}) ICollection {
 		Value:       reflect.ValueOf(array),
 		elementType: reflect.TypeOf(array).Elem(),
 	}
+}
+
+// NewCollectionFromMap Creates a new ICollection from the given iterable. Panics if the provided interface is not an iterable or map.
+func NewCollectionFromMap(collection interface{}) ICollection {
+	mapType := reflect.TypeOf(collection)
+
+	if mapType.Kind() != reflect.Map {
+		panic("Unable to create iterable from a none Map")
+	}
+
+	_map := reflect.ValueOf(collection)
+	pairs := make([]MapEntry, 0)
+	for _, key := range _map.MapKeys() {
+		val := _map.MapIndex(key)
+		entry := MapEntry{Key: key.Interface(), Value: val.Interface()}
+		pairs = append(pairs, entry)
+	}
+
+	return NewCollectionFromArray(pairs)
 }
 
 // NewCollection Creates a new empty iterable of the given type

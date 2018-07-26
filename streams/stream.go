@@ -54,6 +54,17 @@ func FromArray(array interface{}, threads ...int) *Stream {
 	return FromIterable(NewCollectionFromArray(array), threads...)
 }
 
+// FromMap Creates a Stream from a given map.
+//
+// - iterable:   The iterable to be used to create the stream
+// - threads: If provided, enables parallel filtering for all filter operations. Indicates the amount of go channels
+//            to be used to a maximum of the available CPUs in the host machine. <= 0 indicates the maximum amount of
+//            available CPUs will be the number that determines the amount of go channels to be used. If order matters,
+//            best combine it with a `SortBy`. Only needs to be provided once per stream.
+func FromMap(collection interface{}, threads ...int) *Stream {
+	return FromIterable(NewCollectionFromMap(collection), threads...)
+}
+
 // FromIterable Creates a Stream from a given IIterable.
 //
 // - iterable: The ICollection to be used to create the stream
