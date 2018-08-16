@@ -222,3 +222,7 @@ func TestStream_OrderByDesc(t *testing.T) {
 
 	assert.Equal(t, expected, sorted)
 }
+
+func TestSomething(t *testing.T) {
+
+}
