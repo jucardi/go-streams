@@ -8,8 +8,8 @@ import (
 	"sync"
 )
 
-// ArrayStream represents the collection stream
-type ArrayStream struct {
+// Stream is the default stream implementation which allows stream operations on IIterables.
+type Stream struct {
 	iterable IIterable
 	filters  []ConditionalFunc
 	sorts    []sortFunc
@@ -30,7 +30,7 @@ type sorter struct {
 // host machine. Providing a value <= 0, indicates the maximum amount of available CPUs will be the number that determines
 // the amount of go channels to be used. If order matters, best combine it with a `SortBy`. Only needs to be provided once
 // per stream.
-func (s *ArrayStream) SetThreads(threads int) int {
+func (s *Stream) SetThreads(threads int) int {
 	return s.updateCores(threads)
 }
 
@@ -41,7 +41,7 @@ func (s *ArrayStream) SetThreads(threads int) int {
 //            to be used to a maximum of the available CPUs in the host machine. <= 0 indicates the maximum amount of
 //            available CPUs will be the number that determines the amount of go channels to be used. If order matters,
 //            best combine it with a `SortBy`. Only needs to be provided once per stream.
-func (s *ArrayStream) Filter(f ConditionalFunc, threads ...int) IStream {
+func (s *Stream) Filter(f ConditionalFunc, threads ...int) IStream {
 	s.updateCores(threads...)
 	s.filters = append(s.filters, f)
 	return s
@@ -54,7 +54,7 @@ func (s *ArrayStream) Filter(f ConditionalFunc, threads ...int) IStream {
 //            to be used to a maximum of the available CPUs in the host machine. <= 0 indicates the maximum amount of
 //            available CPUs will be the number that determines the amount of go channels to be used. If order matters,
 //            best combine it with a `SortBy`. Only needs to be provided once per stream.
-func (s *ArrayStream) Except(f ConditionalFunc, threads ...int) IStream {
+func (s *Stream) Except(f ConditionalFunc, threads ...int) IStream {
 	s.updateCores(threads...)
 	s.filters = append(s.filters, func(x interface{}) bool { return !f(x) })
 	return s
@@ -67,7 +67,7 @@ func (s *ArrayStream) Except(f ConditionalFunc, threads ...int) IStream {
 //            to be used to a maximum of the available CPUs in the host machine. <= 0 indicates the maximum amount of
 //            available CPUs will be the number that determines the amount of go channels to be used. If order matters,
 //            best combine it with a `SortBy`. Only needs to be provided once per stream.
-func (s *ArrayStream) Map(f ConvertFunc, threads ...int) IStream {
+func (s *Stream) Map(f ConvertFunc, threads ...int) IStream {
 	iterable := s.process()
 	var col ICollection
 
@@ -87,19 +87,19 @@ func (s *ArrayStream) Map(f ConvertFunc, threads ...int) IStream {
 
 // First Returns the first element of the resulting stream.
 // Returns nil (or default value if provided) if the resulting stream is empty.
-func (s *ArrayStream) First(defaultValue ...interface{}) interface{} {
+func (s *Stream) First(defaultValue ...interface{}) interface{} {
 	return s.At(0, defaultValue...)
 }
 
 // Last Returns the last element of the resulting stream.
 // Returns nil (or default value if provided) if the resulting stream is empty.
-func (s *ArrayStream) Last(defaultValue ...interface{}) interface{} {
+func (s *Stream) Last(defaultValue ...interface{}) interface{} {
 	return s.AtReverse(0, defaultValue...)
 }
 
 // At Returns the element at the given index in the resulting stream.
 // Returns nil (or default value if provided) if out of bounds.
-func (s *ArrayStream) At(index int, defaultValue ...interface{}) interface{} {
+func (s *Stream) At(index int, defaultValue ...interface{}) interface{} {
 	iterator := s.process().Iterator()
 	iterator.Skip(index)
 
@@ -112,7 +112,7 @@ func (s *ArrayStream) At(index int, defaultValue ...interface{}) interface{} {
 
 // AtReverse Returns the element at the given position, starting from the last element to the first in the resulting stream.
 // Returns nil (or default value if provided) if out of bounds.
-func (s *ArrayStream) AtReverse(pos int, defaultValue ...interface{}) interface{} {
+func (s *Stream) AtReverse(pos int, defaultValue ...interface{}) interface{} {
 	// TODO: Return error if Len is unavailable
 	iterable := s.process()
 	iterator := iterable.Iterator()
@@ -132,7 +132,7 @@ func (s *ArrayStream) AtReverse(pos int, defaultValue ...interface{}) interface{
 }
 
 // Count Counts the elements of the resulting stream
-func (s *ArrayStream) Count() int {
+func (s *Stream) Count() int {
 	iterable := s.process()
 
 	if iterable.Len() >= 0 {
@@ -152,7 +152,7 @@ func (s *ArrayStream) Count() int {
 // AnyMatch Indicates whether any elements of the stream match the given condition function.
 //
 // - f:       The matching function to be used.
-func (s *ArrayStream) AnyMatch(f ConditionalFunc) bool {
+func (s *Stream) AnyMatch(f ConditionalFunc) bool {
 	iterable := s.process()
 	return anyMatch(iterable, 0, iterable.Len(), f, false)
 }
@@ -160,7 +160,7 @@ func (s *ArrayStream) AnyMatch(f ConditionalFunc) bool {
 // AllMatch Indicates whether ALL elements of the stream match the given condition function
 //
 // - f:       The matching function to be used.
-func (s *ArrayStream) AllMatch(f ConditionalFunc) bool {
+func (s *Stream) AllMatch(f ConditionalFunc) bool {
 	iterable := s.process()
 	return !anyMatch(iterable, 0, iterable.Len(), f, true)
 }
@@ -168,21 +168,21 @@ func (s *ArrayStream) AllMatch(f ConditionalFunc) bool {
 // NoneMatch Indicates whether NONE of elements of the stream match the given condition function.
 //
 // - f:       The matching function to be used.
-func (s *ArrayStream) NoneMatch(f ConditionalFunc) bool {
+func (s *Stream) NoneMatch(f ConditionalFunc) bool {
 	return !s.AnyMatch(f)
 }
 
 // Contains Indicates whether the provided value matches any of the values in the stream
 //
 // - value:   The value to be found.
-func (s *ArrayStream) Contains(value interface{}) bool {
+func (s *Stream) Contains(value interface{}) bool {
 	return s.AnyMatch(func(val interface{}) bool {
 		return value == val
 	})
 }
 
 // ForEach Iterates over all elements in the stream calling the provided function.
-func (s *ArrayStream) ForEach(f IterFunc) {
+func (s *Stream) ForEach(f IterFunc) {
 	iterable := s.process()
 	iterator := iterable.Iterator()
 
@@ -199,7 +199,7 @@ func (s *ArrayStream) ForEach(f IterFunc) {
 // - threads:   Indicates the amount of go channels to be used to a maximum of the available CPUs in the host machine. <= 0 indicates
 //              the maximum amount of available CPUs will be the number that determines the amount of go channels to be used.
 // - skipWait:  Indicates whether `ParallelForEach` will wait until all channels are done processing.
-func (s *ArrayStream) ParallelForEach(f IterFunc, threads int, skipWait ...bool) {
+func (s *Stream) ParallelForEach(f IterFunc, threads int, skipWait ...bool) {
 	var wg sync.WaitGroup
 	cores := getCores(threads)
 	iterable := s.process()
@@ -234,12 +234,12 @@ func (s *ArrayStream) ParallelForEach(f IterFunc, threads int, skipWait ...bool)
 }
 
 // ToArray Returns an array of elements from the resulting stream
-func (s *ArrayStream) ToArray() interface{} {
+func (s *Stream) ToArray() interface{} {
 	return s.process().ToArray()
 }
 
 // ToCollection Returns a `ICollection` of elements from the resulting stream
-func (s *ArrayStream) ToCollection() ICollection {
+func (s *Stream) ToCollection() ICollection {
 	iterable := s.process()
 	colReflectType := reflect.TypeOf((*ICollection)(nil)).Elem()
 
@@ -254,14 +254,14 @@ func (s *ArrayStream) ToCollection() ICollection {
 }
 
 // ToIterable Returns a `IIterable` of elements from the resulting stream
-func (s *ArrayStream) ToIterable() IIterable {
+func (s *Stream) ToIterable() IIterable {
 	return s.process()
 }
 
 // OrderBy Sorts the elements in the stream using the provided comparable function.
 //
 // - desc:  indicates whether the sorting should be done descendant
-func (s *ArrayStream) OrderBy(f SortFunc, desc ...bool) IStream {
+func (s *Stream) OrderBy(f SortFunc, desc ...bool) IStream {
 	s.sorts = nil
 	return s.ThenBy(f, desc...)
 }
@@ -270,7 +270,7 @@ func (s *ArrayStream) OrderBy(f SortFunc, desc ...bool) IStream {
 // attempts to sort ascending the 2 elements with an additional comparable function.
 //
 // - desc:  indicates whether the sorting should be done descendant
-func (s *ArrayStream) ThenBy(f SortFunc, desc ...bool) IStream {
+func (s *Stream) ThenBy(f SortFunc, desc ...bool) IStream {
 	d := false
 
 	if len(desc) > 0 {
@@ -284,7 +284,7 @@ func (s *ArrayStream) ThenBy(f SortFunc, desc ...bool) IStream {
 	return s
 }
 
-func (s *ArrayStream) process() IIterable {
+func (s *Stream) process() IIterable {
 	if s.threads != 1 {
 		return s.parallelProcess(s.threads)
 	}
@@ -295,18 +295,18 @@ func (s *ArrayStream) process() IIterable {
 	return iterable
 }
 
-func (s *ArrayStream) parallelProcess(threads int) IIterable {
+func (s *Stream) parallelProcess(threads int) IIterable {
 	var iterable = s.iterable
 	iterable = s.parallelProcessHandler(iterable, threads)
 	iterable = s.sort(iterable)
 	return iterable
 }
 
-func (s *ArrayStream) filter(iterable IIterable) IIterable {
+func (s *Stream) filter(iterable IIterable) IIterable {
 	return s.filterHandler(iterable, 0, iterable.Len())
 }
 
-func (s *ArrayStream) filterHandler(iterable IIterable, start, end int) IIterable {
+func (s *Stream) filterHandler(iterable IIterable, start, end int) IIterable {
 	if len(s.filters) == 0 {
 		return iterable
 	}
@@ -335,7 +335,7 @@ func (s *ArrayStream) filterHandler(iterable IIterable, start, end int) IIterabl
 	return ret
 }
 
-func (s *ArrayStream) parallelProcessHandler(iterable IIterable, threads int) IIterable {
+func (s *Stream) parallelProcessHandler(iterable IIterable, threads int) IIterable {
 	worker := func(result chan IIterable, start, end int) {
 		result <- s.filterHandler(iterable, start, end)
 	}
@@ -361,7 +361,7 @@ func (s *ArrayStream) parallelProcessHandler(iterable IIterable, threads int) II
 	return ret
 }
 
-func (s *ArrayStream) sort(iterable IIterable) IIterable {
+func (s *Stream) sort(iterable IIterable) IIterable {
 	if len(s.sorts) == 0 {
 		return iterable
 	}
@@ -376,7 +376,7 @@ func (s *ArrayStream) sort(iterable IIterable) IIterable {
 	return v
 }
 
-func (s *ArrayStream) updateCores(threads ...int) int {
+func (s *Stream) updateCores(threads ...int) int {
 	if len(threads) > 0 {
 		s.threads = getCores(threads...)
 	}

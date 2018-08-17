@@ -2,8 +2,11 @@ package streams
 
 import (
 	"bytes"
+	"encoding/json"
 	"github.com/stretchr/testify/assert"
 	"math/rand"
+	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -103,7 +106,7 @@ func TestStream_FirstAndLast(t *testing.T) {
 	assert.Equal(t, "some-value", emptyStream.Last("some-value"))
 }
 
-func TestStream_Map(t *testing.T) {
+func TestStream_MapFn(t *testing.T) {
 	mapFunc := func(i interface{}) interface{} {
 		return 5
 	}
@@ -158,7 +161,7 @@ func TestStream_ParallelForEach(t *testing.T) {
 }
 
 // This test may fail when running with coverage with IntelliJ due to the coverage capture that may affect
-// the performance of go channels. Running normally on a 2 CPU host, demonstrates an efficiency of around 200 % vs non-parallel.
+// the performance of go channels. Running normally on a 2 CPU host, demonstrates an efficiency of around 200% vs non-parallel.
 func TestStream_ParallelFiltering(t *testing.T) {
 	cores := getCores(-1)
 
@@ -223,6 +226,35 @@ func TestStream_OrderByDesc(t *testing.T) {
 	assert.Equal(t, expected, sorted)
 }
 
-func TestSomething(t *testing.T) {
+func TestStream_MapCollection(t *testing.T) {
+	m := map[string]string{
+		"a": "123",
+		"b": "456",
+		"c": "789",
+		"d": "000",
+		"e": "111",
+	}
 
+	result := From(m).
+		Filter(func(i interface{}) bool {
+			// assert the elements in the filter are *KeyValuePair
+			assert.Equal(t, keyValuePairType, reflect.TypeOf(i))
+
+			pair := i.(*KeyValuePair)
+			return pair.Key.(string) != "d"
+		}).
+		OrderBy(func(a interface{}, b interface{}) int {
+			// assert the elements in the filter are *KeyValuePair
+			assert.Equal(t, keyValuePairType, reflect.TypeOf(a))
+			assert.Equal(t, keyValuePairType, reflect.TypeOf(b))
+			aPair, bPair := a.(*KeyValuePair), b.(*KeyValuePair)
+
+			x, _ := strconv.Atoi(aPair.Value.(string))
+			y, _ := strconv.Atoi(bPair.Value.(string))
+			return x - y
+		}).
+		ToArray()
+
+	jsonResult, _ := json.MarshalIndent(result, "", " ")
+	assert.JSONEq(t, `[{ "Key": "e", "Value": "111" }, { "Key": "a", "Value": "123" }, { "Key": "b", "Value": "456" }, { "Key": "c", "Value": "789" }]`, string(jsonResult))
 }
