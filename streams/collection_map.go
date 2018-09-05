@@ -105,7 +105,7 @@ func (g *mapCollection) ToArray() interface{} {
 	for _, key := range g.v.MapKeys() {
 		array = append(array, &KeyValuePair{
 			Key:   key.Interface(),
-			Value: g.v.MapIndex(key),
+			Value: g.v.MapIndex(key).Interface(),
 		})
 	}
 	return array
