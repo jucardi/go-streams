@@ -6,8 +6,16 @@ This library provides
 
 ##### Quick Start
 
+To get the most recent source code:
+
 ```bash
 go get github.com/jucardi/go-streams
+```
+
+To get a specific version:
+
+```bash
+go get gopkg.in/jucardi/go-streams.v1
 ```
 
 ##### Quick Overview
