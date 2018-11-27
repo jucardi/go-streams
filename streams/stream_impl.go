@@ -330,7 +330,10 @@ func (s *Stream) process() IIterable {
 		return s.parallelProcess(s.threads)
 	}
 
-	var iterable = s.iterable
+	iterable := s.iterable
+	if iterable == nil {
+		return nil
+	}
 	iterable = s.filter(iterable)
 	iterable = s.sort(iterable)
 	return iterable
