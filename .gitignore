@@ -19,7 +19,5 @@
 
 test-artifacts/
 build
-test.sh
 tmp
-target
-teststatus.sh
+

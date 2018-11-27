@@ -116,7 +116,11 @@ func (s *Stream) Last(defaultValue ...interface{}) interface{} {
 // - defaultValue:  (Optional) The default value to return if out of bounds.
 //
 func (s *Stream) At(index int, defaultValue ...interface{}) interface{} {
-	iterator := s.process().Iterator()
+	iterable := s.process()
+	if iterable == nil {
+		return nil
+	}
+	iterator := iterable.Iterator()
 	iterator.Skip(index)
 
 	val := iterator.Current()
@@ -264,7 +268,11 @@ func (s *Stream) ParallelForEach(f IterFunc, threads int, skipWait ...bool) {
 
 // ToArray Returns an array of elements from the resulting stream
 func (s *Stream) ToArray() interface{} {
-	return s.process().ToArray()
+	iterable := s.process()
+	if iterable == nil {
+		return nil
+	}
+	return iterable.ToArray()
 }
 
 // ToCollection Returns a `ICollection` of elements from the resulting stream

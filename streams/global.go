@@ -14,10 +14,8 @@ import (
 //             best combine it with a `SortBy`. Only needs to be provided once per stream.
 //
 func From(set interface{}, threads ...int) IStream {
-	colReflectType := reflect.TypeOf((*IIterable)(nil)).Elem()
-
-	if reflect.PtrTo(reflect.TypeOf(set)).Implements(colReflectType) {
-		return FromIterable(set.(IIterable), threads...)
+	if v, ok := set.(IIterable); ok {
+		return FromIterable(v, threads...)
 	}
 
 	t := reflect.TypeOf(set)

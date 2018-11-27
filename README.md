@@ -6,7 +6,7 @@ This library provides
 
 ##### Quick Start
 
-To get the most recent source code:
+To keep up to date with the most recent version:
 
 ```bash
 go get github.com/jucardi/go-streams
