@@ -259,3 +259,22 @@ func TestStream_MapCollection(t *testing.T) {
 	jsonResult, _ := json.MarshalIndent(result, "", " ")
 	assert.JSONEq(t, `[{ "Key": "e", "Value": "111" }, { "Key": "a", "Value": "123" }, { "Key": "b", "Value": "456" }, { "Key": "c", "Value": "789" }]`, string(jsonResult))
 }
+
+func TestStream_Distinct(t *testing.T) {
+	arr := append(testArray, "apple", "banana", "kiwi", "apple", "banana", "apple")
+	result := From(arr).Distinct().ToArray().([]string)
+
+	assert.Equal(t, len(result), len(testArray))
+}
+
+func TestStream_DistinctWithSort(t *testing.T) {
+	arr := append(testArray, "apple", "banana", "kiwi", "apple", "banana", "apple")
+	sortFn := func(a interface{}, b interface{}) int {
+		return strings.Compare(a.(string), b.(string))
+	}
+
+	expected := []string{"apple", "banana", "kiwi", "orange", "peach", "pear", "pineapple", "plum"}
+	sorted := From(arr).OrderBy(sortFn).Distinct().ToArray().([]string)
+
+	assert.Equal(t, expected, sorted)
+}

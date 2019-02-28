@@ -35,6 +35,9 @@ type IStream interface {
 	//            best combine it with a `SortBy`. Only needs to be provided once per stream.
 	Map(f ConvertFunc, threads ...int) IStream
 
+	// Distinct Returns a stream consisting of the distinct elements
+	Distinct() IStream
+
 	// First Returns the first element of the resulting stream.
 	// Returns nil (or default value if provided) if the resulting stream is empty.
 	First(defaultValue ...interface{}) interface{}

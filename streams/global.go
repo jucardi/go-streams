@@ -112,26 +112,6 @@ func NewCollectionFromMap(m interface{}) (ICollection, error) {
 	}).init(), nil
 }
 
-//func NewCollectionFromMap(m interface{}) (ICollection, error) {
-//	// Ideally, a collection implementation from a Map would have been defined that knows how to iterate over a K,V set to avoid iterating over the full map initially generate
-//	// an array of `*KeyValuePair`. However, there is not way to iterate over a K,V set of a map through reflection, instead the only thing available is the function `MapKeys`
-//	// which
-//	val := reflect.ValueOf(m)
-//
-//	if val.Kind() != reflect.Map {
-//		return nil, fmt.Errorf("unable to create a key value set collection, the input value must be a map, %s", val.Kind().String())
-//	}
-//
-//	var array []*KeyValuePair
-//	for _, key := range val.MapKeys() {
-//		array = append(array, &KeyValuePair{
-//			Key:   key.Interface(),
-//			Value: val.MapIndex(key),
-//		})
-//	}
-//
-//	return NewCollectionFromArray(array)
-//}
 // NewArrayCollection Creates a new empty array collection of the given type
 //
 // - elementType:  The element type for the items in the collection to be created.

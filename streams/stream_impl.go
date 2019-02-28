@@ -13,6 +13,7 @@ type Stream struct {
 	iterable IIterable
 	filters  []ConditionalFunc
 	sorts    []sortFunc
+	distinct bool
 	threads  int
 }
 
@@ -24,6 +25,19 @@ type sortFunc struct {
 type sorter struct {
 	array interface{}
 	sorts []sortFunc
+}
+
+type iAdd interface {
+	Add(item interface{}) error
+}
+
+type mapAdd struct {
+	m reflect.Value
+}
+
+func (m *mapAdd) Add(item interface{}) error {
+	m.m.SetMapIndex(reflect.ValueOf(item), reflect.ValueOf(true))
+	return nil
 }
 
 // SetThreads Sets the amount of go channels to be used for parallel filtering to a maximum of the available CPUs in the
@@ -89,6 +103,12 @@ func (s *Stream) Map(f ConvertFunc, threads ...int) IStream {
 	}
 
 	return FromIterable(col)
+}
+
+// Distinct Returns a stream consisting of the distinct elements
+func (s *Stream) Distinct() IStream {
+	s.distinct = true
+	return s
 }
 
 // First Returns the first element of the resulting stream.
@@ -347,17 +367,25 @@ func (s *Stream) parallelProcess(threads int) IIterable {
 }
 
 func (s *Stream) filter(iterable IIterable) IIterable {
-	return s.filterHandler(iterable, 0, iterable.Len())
+	return s.iterHandler(iterable, 0, iterable.Len())
 }
 
-func (s *Stream) filterHandler(iterable IIterable, start, end int) IIterable {
-	if len(s.filters) == 0 {
+func (s *Stream) iterHandler(iterable IIterable, start, end int) IIterable {
+	if len(s.filters) == 0 && !s.distinct {
 		return iterable
 	}
+
+	var adder iAdd
 
 	ret := NewArrayCollection(iterable.ElementType())
 	iterator := iterable.Iterator().Skip(start)
 	i := start
+	adder = ret
+
+	if s.distinct {
+		mType := reflect.MapOf(iterable.ElementType(), reflect.TypeOf(true))
+		adder = &mapAdd{m: reflect.MakeMap(mType)}
+	}
 
 	for x := iterator.Current(); iterator.HasNext() && i < end; x = iterator.Next() {
 		i++
@@ -372,7 +400,14 @@ func (s *Stream) filterHandler(iterable IIterable, start, end int) IIterable {
 		}
 
 		if match {
-			ret.Add(x)
+			_ = adder.Add(x)
+		}
+	}
+
+	if s.distinct {
+		mAdder := adder.(*mapAdd)
+		for _, v := range mAdder.m.MapKeys() {
+			_ = ret.Add(v.Interface())
 		}
 	}
 
@@ -381,7 +416,7 @@ func (s *Stream) filterHandler(iterable IIterable, start, end int) IIterable {
 
 func (s *Stream) parallelProcessHandler(iterable IIterable, threads int) IIterable {
 	worker := func(result chan IIterable, start, end int) {
-		result <- s.filterHandler(iterable, start, end)
+		result <- s.iterHandler(iterable, start, end)
 	}
 
 	ret := NewArrayCollection(iterable.ElementType())
@@ -482,7 +517,6 @@ func getCores(threads ...int) int {
 // TODO:
 //
 // STREAM
-//   Distinct
 //   Reverse
 
 // OPTIONAL ?? or element
