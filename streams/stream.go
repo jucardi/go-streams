@@ -67,6 +67,24 @@ type IStream interface {
 	// - f:       The matching function to be used.
 	AllMatch(f ConditionalFunc) bool
 
+	// IfAllMatch returns a `Then` handler where actions like `Then` or `Else` can be triggered if `AllMatch`
+	// based on what the result of `AllMatch` would be with the provided conditional function
+	//
+	// - f:       The matching function to be used.
+	IfAllMatch(f ConditionalFunc) IThen
+
+	// NotAllMatch is the negation of `AllMatch`. If any of the elements don not match the provided condition
+	// the result will be `true`; `false` otherwise.
+	//
+	// - f:       The matching function to be used.
+	NotAllMatch(f ConditionalFunc) bool
+
+	// IfNotAllMatch returns a `Then` handler where actions like `Then` or `Else` can be triggered if `AllMatch`
+	// based on what the result of `AllMatch` would be with the provided conditional function
+	//
+	// - f:       The matching function to be used.
+	IfNotAllMatch(f ConditionalFunc) IThen
+
 	// NoneMatch Indicates whether NONE of elements of the stream match the given condition function.
 	//
 	// - f:       The matching function to be used.
@@ -91,7 +109,10 @@ type IStream interface {
 	ParallelForEach(f IterFunc, threads int, skipWait ...bool)
 
 	// ToArray Returns an array of elements from the resulting stream
-	ToArray() interface{}
+	//
+	// - defaultArray:  (optional) an array instance to return in case that after a stream operation
+	//                  would result in an empty array.
+	ToArray(defaultArray ...interface{}) interface{}
 
 	// ToCollection Returns a `ICollection` of elements from the resulting stream
 	ToCollection() ICollection

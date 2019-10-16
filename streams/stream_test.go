@@ -3,6 +3,7 @@ package streams
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"math/rand"
 	"reflect"
 	"strconv"
@@ -186,23 +187,37 @@ func TestStream_ParallelFiltering(t *testing.T) {
 		return v.(int) < 10
 	}
 
-	start := time.Now()
-	result1 := From(bigArray).Filter(filter1).Filter(filter2).ToArray().([]int)
-	elapsed1 := time.Since(start)
+	const timesToTry = 5
 
-	start = time.Now()
-	result2 := From(bigArray, -1).Filter(filter1).Filter(filter2).ToArray().([]int)
-	elapsed2 := time.Since(start)
+	var avElapsed1, avElapsed2 time.Duration
+	successTimes := 0
 
-	println("Non-Parallel Filtering time: ", elapsed1/time.Millisecond, "ms")
-	println("Parallel Filtering time:  ", elapsed2/time.Millisecond, "ms")
-	println("Parallel took", 100*elapsed2/elapsed1, "% of Non-Parallel time")
+	for i := 0; i < timesToTry; i++ {
+		start := time.Now()
+		result1 := From(bigArray).Filter(filter1).Filter(filter2).ToArray().([]int)
+		elapsed1 := time.Since(start)
+
+		start = time.Now()
+		result2 := From(bigArray, -1).Filter(filter1).Filter(filter2).ToArray().([]int)
+		elapsed2 := time.Since(start)
+
+		if elapsed1 > elapsed2 {
+			successTimes++
+		}
+
+		avElapsed1 += elapsed1
+		avElapsed2 += elapsed2
+
+		// Validates than both results were the same
+		assert.Equal(t, len(result1), len(result2))
+	}
+
+	fmt.Println("Non-Parallel Filtering average time: ", avElapsed1/timesToTry)
+	fmt.Println("Parallel Filtering average time:  ", avElapsed2/timesToTry)
+	fmt.Println("Parallel took", int64(100*avElapsed2/avElapsed1), "% of Non-Parallel time")
 
 	// Validates parallel filtering was faster than non-parallel
-	assert.True(t, elapsed1 > elapsed2)
-
-	// Validates than both results were the same
-	assert.Equal(t, len(result1), len(result2))
+	assert.True(t, avElapsed1/timesToTry > avElapsed2/timesToTry)
 }
 
 func TestStream_OrderBy(t *testing.T) {

@@ -117,6 +117,9 @@ func NewCollectionFromMap(m interface{}) (ICollection, error) {
 // - elementType:  The element type for the items in the collection to be created.
 //
 func NewArrayCollection(elementType reflect.Type) ICollection {
+	if elementType == nil {
+		return &arrayCollection{}
+	}
 	return &arrayCollection{
 		v:           reflect.MakeSlice(reflect.SliceOf(elementType), 0, 0),
 		elementType: elementType,

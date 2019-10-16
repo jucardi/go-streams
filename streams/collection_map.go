@@ -71,7 +71,7 @@ func (g *mapCollection) Add(item interface{}) error {
 	pair := item.(*KeyValuePair)
 	keyVal := reflect.ValueOf(pair.Key)
 	valueVal := reflect.ValueOf(pair.Value)
-	g.keySet.Add(keyVal)
+	_ = g.keySet.Add(keyVal)
 	g.v.SetMapIndex(keyVal, valueVal)
 	return nil
 }
@@ -100,7 +100,7 @@ func (g *mapCollection) Iterator() IIterator {
 	return newCollectionIterator(g)
 }
 
-func (g *mapCollection) ToArray() interface{} {
+func (g *mapCollection) ToArray(_ ...interface{}) interface{} {
 	var array []*KeyValuePair
 	for _, key := range g.v.MapKeys() {
 		array = append(array, &KeyValuePair{

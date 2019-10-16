@@ -99,7 +99,7 @@ func (s *Stream) Map(f ConvertFunc, threads ...int) IStream {
 			col = NewArrayCollection(reflect.TypeOf(n))
 		}
 
-		col.Add(n)
+		_ = col.Add(n)
 	}
 
 	return FromIterable(col)
@@ -211,6 +211,34 @@ func (s *Stream) AllMatch(f ConditionalFunc) bool {
 	return !anyMatch(iterable, 0, iterable.Len(), f, true)
 }
 
+// IfAllMatch returns a `Then` handler where actions like `Then` or `Else` can be triggered if `AllMatch`
+// based on what the result of `AllMatch` would be with the provided conditional function
+//
+// - f:       The matching function to be used.
+func (s *Stream) IfAllMatch(f ConditionalFunc) IThen {
+	return &thenWrapper{
+		conditionMet: s.AllMatch(f),
+	}
+}
+
+// NotAllMatch is the negation of `AllMatch`. If any of the elements don not match the provided condition
+// the result will be `true`; `false` otherwise.
+//
+// - f:       The matching function to be used.
+func (s *Stream) NotAllMatch(f ConditionalFunc) bool {
+	return !s.AllMatch(f)
+}
+
+// IfNotAllMatch returns a `Then` handler where actions like `Then` or `Else` can be triggered if `AllMatch`
+// based on what the result of `AllMatch` would be with the provided conditional function
+//
+// - f:       The matching function to be used.
+func (s *Stream) IfNotAllMatch(f ConditionalFunc) IThen {
+	return &thenWrapper{
+		conditionMet: s.NotAllMatch(f),
+	}
+}
+
 // NoneMatch Indicates whether NONE of elements of the stream match the given condition function.
 //
 // - f:       The matching function to be used.
@@ -287,12 +315,12 @@ func (s *Stream) ParallelForEach(f IterFunc, threads int, skipWait ...bool) {
 }
 
 // ToArray Returns an array of elements from the resulting stream
-func (s *Stream) ToArray() interface{} {
+func (s *Stream) ToArray(defaultArray ...interface{}) interface{} {
 	iterable := s.process()
 	if iterable == nil {
 		return nil
 	}
-	return iterable.ToArray()
+	return iterable.ToArray(defaultArray...)
 }
 
 // ToCollection Returns a `ICollection` of elements from the resulting stream
@@ -305,7 +333,7 @@ func (s *Stream) ToCollection() ICollection {
 	}
 
 	ret := NewArrayCollection(iterable.ElementType())
-	ret.AddAll(iterable)
+	_ = ret.AddAll(iterable)
 
 	return ret
 }

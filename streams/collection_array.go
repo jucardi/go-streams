@@ -1,6 +1,9 @@
 package streams
 
-import "reflect"
+import (
+	"errors"
+	"reflect"
+)
 
 type arrayCollection struct {
 	v           reflect.Value
@@ -8,7 +11,10 @@ type arrayCollection struct {
 }
 
 func (g *arrayCollection) Len() int {
-	return g.v.Len()
+	if g.v.IsValid() {
+		return g.v.Len()
+	}
+	return 0
 }
 
 func (g *arrayCollection) Index(index int) interface{} {
@@ -27,6 +33,13 @@ func (g *arrayCollection) Remove(index int, keepOrder ...bool) interface{} {
 }
 
 func (g *arrayCollection) Add(item interface{}) error {
+	if item == nil {
+		return errors.New("unable to add nil value")
+	}
+	if g.elementType == nil {
+		g.elementType = reflect.TypeOf(item)
+		g.v = reflect.MakeSlice(reflect.SliceOf(g.elementType), 0, 0)
+	}
 	if reflect.PtrTo(reflect.TypeOf(item)).AssignableTo(g.ElementType()) {
 		return ErrorWrongType
 	}
@@ -52,7 +65,10 @@ func (g *arrayCollection) Iterator() IIterator {
 	return newCollectionIterator(g)
 }
 
-func (g *arrayCollection) ToArray() interface{} {
+func (g *arrayCollection) ToArray(defaultArray ...interface{}) interface{} {
+	if (!g.v.IsValid() || (g.v.IsValid() && g.v.IsNil())) && len(defaultArray) > 0 {
+		return defaultArray[0]
+	}
 	return g.v.Interface()
 }
 

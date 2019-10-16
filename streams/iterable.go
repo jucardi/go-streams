@@ -15,7 +15,7 @@ type IIterable interface {
 	ElementType() reflect.Type
 
 	// ToArray returns an array representation of the iterable
-	ToArray() interface{}
+	ToArray(defaultArray ...interface{}) interface{}
 }
 
 type IMapIterable interface {
