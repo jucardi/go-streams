@@ -12,12 +12,6 @@ To keep up to date with the most recent version:
 go get github.com/jucardi/go-streams
 ```
 
-To get a specific version:
-
-```bash
-go get gopkg.in/jucardi/go-streams.v1
-```
-
 ##### Quick Overview
 
 Streams facilitate operations on arrays, iterables and collections, such as *filtering*, *sorting*, *mapping*, *foreach*, and parallel operations on the items contained by these arrays, iterables or collections
