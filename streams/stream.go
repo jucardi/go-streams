@@ -1,133 +1,439 @@
 package streams
 
-// IStream defines the functions of a stream implementation
-type IStream interface {
-	// SetThreads Sets the amount of go channels to be used for parallel filtering to a maximum of the available CPUs in the
-	// host machine. Providing a value <= 0, indicates the maximum amount of available CPUs will be the number that determines
-	// the amount of go channels to be used. If order matters, best combine it with a `SortBy`. Only needs to be provided once
-	// per stream.
-	SetThreads(threads int) int
+import (
+	"math"
+	"runtime"
+	"sort"
+	"sync"
+)
 
-	// Filter Filters any element that does not meet the condition provided by the function.
-	//
-	// - f:       The filtering function to be used.
-	// - threads: If provided, enables parallel filtering for all filter operations. Indicates the amount of go channels
-	//            to be used to a maximum of the available CPUs in the host machine. <= 0 indicates the maximum amount of
-	//            available CPUs will be the number that determines the amount of go channels to be used. If order matters,
-	//            best combine it with a `SortBy`. Only needs to be provided once per stream.
-	Filter(f ConditionalFunc, threads ...int) IStream
+var (
+	// To ensure *Stream implements IStream on build
+	_ IStream[string] = (*Stream[string])(nil)
+)
 
-	// Except Filters all elements that meet the condition provided by the function.
-	//
-	// - f:       The filtering function to be used.
-	// - threads: If provided, enables parallel filtering for all filter operations. Indicates the amount of go channels
-	//            to be used to a maximum of the available CPUs in the host machine. <= 0 indicates the maximum amount of
-	//            available CPUs will be the number that determines the amount of go channels to be used. If order matters,
-	//            best combine it with a `SortBy`. Only needs to be provided once per stream.
-	Except(f ConditionalFunc, threads ...int) IStream
+// Stream is the default stream implementation which allows stream operations on IIterables.
+type Stream[T comparable] struct {
+	iterable ICollection[T]
+	filters  []ConditionalFunc[T]
+	sorts    []sortFunc[T]
+	distinct bool
+	threads  int
 
-	// Map Maps the elements of the iterable to a new element, using the mapping function provided
-	//
-	// - f:       The filtering function to be used.
-	// - threads: If provided, enables parallel filtering for all filter operations. Indicates the amount of go channels
-	//            to be used to a maximum of the available CPUs in the host machine. <= 0 indicates the maximum amount of
-	//            available CPUs will be the number that determines the amount of go channels to be used. If order matters,
-	//            best combine it with a `SortBy`. Only needs to be provided once per stream.
-	Map(f ConvertFunc, threads ...int) IStream
-
-	// Distinct Returns a stream consisting of the distinct elements
-	Distinct() IStream
-
-	// First Returns the first element of the resulting stream.
-	// Returns nil (or default value if provided) if the resulting stream is empty.
-	First(defaultValue ...interface{}) interface{}
-
-	// Last Returns the last element of the resulting stream.
-	// Returns nil (or default value if provided) if the resulting stream is empty.
-	Last(defaultValue ...interface{}) interface{}
-
-	// At Returns the element at the given index in the resulting stream.
-	// Returns nil (or default value if provided) if out of bounds.
-	At(index int, defaultValue ...interface{}) interface{}
-
-	// AtReverse Returns the element at the given position, starting from the last element to the first in the resulting stream.
-	// Returns nil (or default value if provided) if out of bounds.
-	AtReverse(pos int, defaultValue ...interface{}) interface{}
-
-	// Count Counts the elements of the resulting stream
-	Count() int
-
-	// AnyMatch Indicates whether any elements of the stream match the given condition function.
-	//
-	// - f:       The matching function to be used.
-	AnyMatch(f ConditionalFunc) bool
-
-	// AllMatch Indicates whether ALL elements of the stream match the given condition function
-	//
-	// - f:       The matching function to be used.
-	AllMatch(f ConditionalFunc) bool
-
-	// IfAllMatch returns a `Then` handler where actions like `Then` or `Else` can be triggered if `AllMatch`
-	// based on what the result of `AllMatch` would be with the provided conditional function
-	//
-	// - f:       The matching function to be used.
-	IfAllMatch(f ConditionalFunc) IThen
-
-	// NotAllMatch is the negation of `AllMatch`. If any of the elements don not match the provided condition
-	// the result will be `true`; `false` otherwise.
-	//
-	// - f:       The matching function to be used.
-	NotAllMatch(f ConditionalFunc) bool
-
-	// IfNotAllMatch returns a `Then` handler where actions like `Then` or `Else` can be triggered if `AllMatch`
-	// based on what the result of `AllMatch` would be with the provided conditional function
-	//
-	// - f:       The matching function to be used.
-	IfNotAllMatch(f ConditionalFunc) IThen
-
-	// NoneMatch Indicates whether NONE of elements of the stream match the given condition function.
-	//
-	// - f:       The matching function to be used.
-	NoneMatch(f ConditionalFunc) bool
-
-	// Contains Indicates whether the provided value matches any of the values in the stream
-	//
-	// - value:   The value to be found.
-	Contains(value interface{}) bool
-
-	// ForEach Iterates over all elements in the stream calling the provided function.
-	ForEach(f IterFunc)
-
-	// ParallelForEach Iterates over all elements in the stream calling the provided function. Creates multiple go channels to parallelize
-	// the operation. ParallelForeach does not use any thread values previously provided in any filtering method nor enables parallel filtering
-	// if any filtering is done prior to the `ParallelForEach` phase. Only use `ParallelForEach` if the order in which the elements are processed
-	// does not matter, otherwise see `ForEach`.
-	//
-	// - threads:   Indicates the amount of go channels to be used to a maximum of the available CPUs in the host machine. <= 0 indicates
-	//              the maximum amount of available CPUs will be the number that determines the amount of go channels to be used.
-	// - skipWait:  Indicates whether `ParallelForEach` will wait until all channels are done processing.
-	ParallelForEach(f IterFunc, threads int, skipWait ...bool)
-
-	// ToArray Returns an array of elements from the resulting stream
-	//
-	// - defaultArray:  (optional) an array instance to return in case that after a stream operation
-	//                  would result in an empty array.
-	ToArray(defaultArray ...interface{}) interface{}
-
-	// ToCollection Returns a `ICollection` of elements from the resulting stream
-	ToCollection() ICollection
-
-	// ToIterable Returns a `IIterable` of elements from the resulting stream
-	ToIterable() IIterable
-
-	// OrderBy Sorts the elements in the stream using the provided comparable function.
-	//
-	// - desc:  indicates whether the sorting should be done descendant
-	OrderBy(f SortFunc, desc ...bool) IStream
-
-	// ThenBy If two elements are considered equal after previously applying a comparable function,
-	// attempts to sort ascending the 2 elements with an additional comparable function.
-	//
-	// - desc:  indicates whether the sorting should be done descendant
-	ThenBy(f SortFunc, desc ...bool) IStream
+	current ICollection[T]
 }
+
+type sortFunc[T comparable] struct {
+	fn   SortFunc[T]
+	desc bool
+}
+
+type sorter[T comparable] struct {
+	array []T
+	sorts []sortFunc[T]
+}
+
+func (s *Stream[T]) SetThreads(threads int) IStream[T] {
+	s.updateCores(threads)
+	return s
+}
+
+func (s *Stream[T]) Filter(f ConditionalFunc[T]) IStream[T] {
+	s.filters = append(s.filters, f)
+	return s
+}
+
+func (s *Stream[T]) Except(f ConditionalFunc[T]) IStream[T] {
+	s.filters = append(s.filters, func(x T) bool { return !f(x) })
+	return s
+}
+
+func (s *Stream[T]) Sort(f SortFunc[T], desc ...bool) IStream[T] {
+	d := false
+
+	if len(desc) > 0 {
+		d = desc[0]
+	}
+
+	s.sorts = append(s.sorts, sortFunc[T]{
+		fn:   f,
+		desc: d,
+	})
+	return s
+}
+
+func (s *Stream[T]) Distinct() IStream[T] {
+	s.distinct = true
+	return s
+}
+
+func (s *Stream[T]) First(defaultValue ...T) T {
+	return s.At(0, defaultValue...)
+}
+
+func (s *Stream[T]) Last(defaultValue ...T) T {
+	return s.AtReverse(0, defaultValue...)
+}
+
+func (s *Stream[T]) At(index int, defaultValue ...T) (ret T) {
+	iterable := s.process()
+	if iterable == nil {
+		return
+	}
+	iterator := iterable.Iterator()
+	iterator.Skip(index)
+
+	var defaultV T
+	ret = iterator.Current()
+	if ret == defaultV && len(defaultValue) > 0 {
+		return defaultValue[0]
+	}
+	return
+}
+
+func (s *Stream[T]) AtReverse(pos int, defaultValue ...T) (ret T) {
+	iterable := s.process()
+	iterator := iterable.Iterator()
+
+	i := iterable.Len() - 1 - pos
+
+	if i >= 0 {
+		iterator.Skip(i)
+		ret = iterator.Current()
+	}
+
+	var defaultV T
+	if ret == defaultV && len(defaultValue) > 0 {
+		return defaultValue[0]
+	}
+
+	return
+}
+
+func (s *Stream[T]) Count() int {
+	iterable := s.process()
+
+	if iterable.Len() >= 0 {
+		return iterable.Len()
+	}
+
+	iterator := iterable.Iterator()
+	size := 0
+
+	for ; iterator.HasNext(); iterator.Next() {
+		size++
+	}
+
+	return size
+}
+
+func (s *Stream[T]) IsEmpty() bool {
+	return s.Count() == 0
+}
+
+func (s *Stream[T]) Contains(value T) bool {
+	return s.AnyMatch(func(val T) bool {
+		return value == val
+	})
+}
+
+func (s *Stream[T]) AnyMatch(f ConditionalFunc[T]) bool {
+	iterable := s.process()
+	return anyMatch[T](iterable, 0, iterable.Len(), f, false)
+}
+
+func (s *Stream[T]) AllMatch(f ConditionalFunc[T]) bool {
+	iterable := s.process()
+	return !anyMatch[T](iterable, 0, iterable.Len(), f, true)
+}
+
+func (s *Stream[T]) NotAllMatch(f ConditionalFunc[T]) bool {
+	return !s.AllMatch(f)
+}
+
+func (s *Stream[T]) NoneMatch(f ConditionalFunc[T]) bool {
+	return !s.AnyMatch(f)
+}
+
+func (s *Stream[T]) IfEmpty() IThen[T] {
+	return &thenWrapper[T]{
+		conditionMet: s.Count() == 0,
+		stream:       FromCollection[T](s.current),
+	}
+}
+
+func (s *Stream[T]) IfAnyMatch(f ConditionalFunc[T]) IThen[T] {
+	return &thenWrapper[T]{
+		conditionMet: s.AnyMatch(f),
+		stream:       FromCollection[T](s.current),
+	}
+}
+
+func (s *Stream[T]) IfAllMatch(f ConditionalFunc[T]) IThen[T] {
+	return &thenWrapper[T]{
+		conditionMet: s.AllMatch(f),
+		stream:       FromCollection[T](s.current),
+	}
+}
+
+func (s *Stream[T]) IfNoneMatch(f ConditionalFunc[T]) IThen[T] {
+	return &thenWrapper[T]{
+		conditionMet: s.NoneMatch(f),
+		stream:       FromCollection[T](s.current),
+	}
+}
+
+func (s *Stream[T]) ForEach(f IterFunc[T]) {
+	iterable := s.process()
+	iterator := iterable.Iterator()
+
+	iterator.ForEachRemaining(f)
+}
+
+func (s *Stream[T]) ParallelForEach(f IterFunc[T], threads int, skipWait ...bool) {
+	var wg sync.WaitGroup
+	cores := getCores(threads)
+	iterable := s.process()
+
+	if iterable.Len() < cores {
+		cores = iterable.Len()
+	}
+
+	worker := func(start, end int) {
+		defer wg.Done()
+		iterator := iterable.Iterator()
+		iterator.Skip(start)
+		i := start
+
+		for val := iterator.Current(); iterator.HasNext() && i < end; val = iterator.Next() {
+			i++
+			f(val)
+		}
+	}
+
+	sliceSize := int(math.Ceil(float64(iterable.Len()) / float64(cores)))
+
+	wg.Add(cores)
+
+	for i := 0; i < cores; i++ {
+		go worker(i*sliceSize, (i+1)*sliceSize)
+	}
+
+	if len(skipWait) == 0 || !skipWait[0] {
+		wg.Wait()
+	}
+}
+
+func (s *Stream[T]) ToArray() []T {
+	iterable := s.process()
+	if iterable == nil {
+		return nil
+	}
+	return iterable.ToArray()
+}
+
+func (s *Stream[T]) ToCollection() ICollection[T] {
+	return s.process()
+}
+
+func (s *Stream[T]) ToIterable() IIterable[T] {
+	return s.process()
+}
+
+func (s *Stream[T]) ToList() IList[T] {
+	col := s.ToCollection()
+	switch ret := col.(type) {
+	case IList[T]:
+		return ret
+	}
+	return NewList[T](col.ToArray())
+}
+
+func (s *Stream[T]) ToDistinct() ISet[T] {
+	return s.Distinct().ToCollection().(ISet[T])
+}
+
+func (s *Stream[T]) process() ICollection[T] {
+	if s.threads != 1 {
+		return s.parallelProcess(s.threads)
+	}
+
+	iterable := s.iterable
+	if iterable == nil {
+		return nil
+	}
+	iterable = s.filter(iterable)
+	iterable = s.sort(iterable)
+	s.current = iterable
+	return iterable
+}
+
+func (s *Stream[T]) parallelProcess(threads int) ICollection[T] {
+	iterable := s.iterable
+	iterable = s.parallelProcessHandler(iterable, threads)
+	iterable = s.sort(iterable)
+	return iterable
+}
+
+func (s *Stream[T]) filter(iterable ICollection[T]) ICollection[T] {
+	return s.iterHandler(iterable, 0, iterable.Len())
+}
+
+func (s *Stream[T]) iterHandler(iterable ICollection[T], start, end int) ICollection[T] {
+	if len(s.filters) == 0 && !s.distinct {
+		return s.iterable
+	}
+
+	var ret ICollection[T]
+	iterator := iterable.Iterator().Skip(start)
+	i := start
+
+	if s.distinct {
+		ret = NewSet[T]()
+	} else {
+		ret = NewList[T]()
+	}
+
+	for x := iterator.Current(); iterator.HasNext() && i < end; x = iterator.Next() {
+		i++
+		match := true
+
+		for _, f := range s.filters {
+			match = match && f(x)
+
+			if !match {
+				break
+			}
+		}
+
+		if match {
+			_ = ret.Add(x)
+		}
+	}
+
+	return ret
+}
+
+func (s *Stream[T]) parallelProcessHandler(iterable ICollection[T], threads int) ICollection[T] {
+	worker := func(result chan ICollection[T], start, end int) {
+		result <- s.iterHandler(iterable, start, end)
+	}
+
+	ret := NewList[T]()
+	cores := getCores(threads)
+
+	if iterable.Len() < cores {
+		cores = iterable.Len()
+	}
+
+	sliceSize := int(math.Ceil(float64(iterable.Len()) / float64(cores)))
+	c := make(chan ICollection[T], cores)
+
+	for i := 0; i < cores; i++ {
+		go worker(c, i*sliceSize, (i+1)*sliceSize)
+	}
+
+	for i := 0; i < cores; i++ {
+		func(iter ICollection[T]) {
+			iter.ForEach(func(item T) { ret.Add(item) })
+		}(<-c)
+	}
+
+	return ret
+}
+
+func (s *Stream[T]) sort(iterable ICollection[T]) ICollection[T] {
+	if len(s.sorts) == 0 {
+		return iterable
+	}
+
+	so := sorter[T]{
+		array: iterable.ToArray(),
+		sorts: s.sorts,
+	}
+
+	sort.Slice(so.array, so.makeLessFunc())
+	v := NewList[T](so.array)
+	return v
+}
+
+func (s *Stream[T]) updateCores(threads ...int) int {
+	if len(threads) > 0 {
+		s.threads = getCores(threads...)
+	}
+	return s.threads
+}
+
+func (s *sorter[T]) makeLessFunc() func(int, int) bool {
+	return func(x, y int) bool {
+		val := 0
+
+		for i := 0; val == 0 && i < len(s.sorts); i++ {
+			sorter := s.sorts[i]
+			val = sorter.fn(s.array[x], s.array[y])
+
+			if sorter.desc {
+				val = val * -1
+			}
+		}
+
+		return val < 0
+	}
+}
+
+func anyMatch[T comparable](iterable IIterable[T], start, end int, f ConditionalFunc[T], negate bool) bool {
+	iterator := iterable.Iterator().Skip(start)
+	i := start
+
+	for x := iterator.Current(); iterator.HasNext() && i < end; x = iterator.Next() {
+		match := true
+
+		if negate {
+			match = match && !f(x)
+		} else {
+			match = match && f(x)
+		}
+
+		if match {
+			return true
+		}
+	}
+
+	return false
+}
+
+func getCores(threads ...int) int {
+	if len(threads) == 0 {
+		return 1
+	}
+
+	maxCores := runtime.NumCPU()
+
+	if threads[0] <= 0 {
+		return maxCores
+	}
+	return threads[0]
+}
+
+// TODO:
+//
+// STREAM
+//   Reverse
+
+// OPTIONAL ?? or element
+//    Min
+//    Max
+//    Average
+//    FindAny                  For parallel operations. Post MVP
+
+// Concat --> Concatenates two sequences
+// Reduce, Aggregate       --->   Sum, min, max, average, string concatenation, with and without seed value
+// Skip(long n) -> skips the first N elements.
+// Peek -> iterates and does something returning back the stream. Mainly for debugging
+// Limit -> limits the size of the stream.
+
+// GROUP OPERATIONS
+//    GroupBy
+//    GroupJoin
+//    Intersect    (default equals or with comparer function)
+//    Union

@@ -1,101 +1,77 @@
 package streams
 
-import (
-	"errors"
-	"reflect"
+var (
+	// To ensure *arrayCollection implements IList on build
+	_ IList[string] = (*arrayCollection[string])(nil)
 )
 
-type arrayCollection struct {
-	v           reflect.Value
-	elementType reflect.Type
+type arrayCollection[T comparable] struct {
+	*CollectionBase[T]
+	arr []T
 }
 
-func (g *arrayCollection) Len() int {
-	if g.v.IsValid() {
-		return g.v.Len()
-	}
-	return 0
-}
-
-func (g *arrayCollection) Index(index int) interface{} {
-	if index < 0 || index >= g.Len() {
-		return nil
+func (c *arrayCollection[T]) Index(index int) (ret T, exists bool) {
+	if index < 0 || index >= c.Len() {
+		return
 	}
 
-	return g.v.Index(index).Interface()
+	return c.arr[index], true
 }
 
-func (g *arrayCollection) Remove(index int, keepOrder ...bool) interface{} {
+func (c *arrayCollection[T]) Add(item ...T) bool {
+	c.arr = append(c.arr, item...)
+	c.modified()
+	return true
+}
+
+func (c *arrayCollection[T]) RemoveAt(index int, keepOrder ...bool) bool {
+	if index < 0 || index >= c.Len() {
+		return false
+	}
+
 	if len(keepOrder) > 0 && keepOrder[0] {
-		return g.removeKeepOrder(index)
+		c.removeKeepOrder(index)
+	} else {
+		c.removeFast(index)
 	}
-	return g.removeFast(index)
+	c.modified()
+	return true
 }
 
-func (g *arrayCollection) Add(item interface{}) error {
-	if item == nil {
-		return errors.New("unable to add nil value")
-	}
-	if g.elementType == nil {
-		g.elementType = reflect.TypeOf(item)
-		g.v = reflect.MakeSlice(reflect.SliceOf(g.elementType), 0, 0)
-	}
-	if reflect.PtrTo(reflect.TypeOf(item)).AssignableTo(g.ElementType()) {
-		return ErrorWrongType
-	}
-
-	g.v = reflect.Append(g.v, reflect.ValueOf(item))
-	return nil
+func (c *arrayCollection[T]) Len() int {
+	return len(c.arr)
 }
 
-func (g *arrayCollection) AddAll(slice IIterable) error {
-	if !slice.ElementType().AssignableTo(g.ElementType()) {
-		return ErrorWrongType
-	}
-
-	g.v = reflect.AppendSlice(g.v, reflect.ValueOf(slice.ToArray()))
-	return nil
+func (c *arrayCollection[T]) Clear() {
+	c.arr = nil
 }
 
-func (g *arrayCollection) ElementType() reflect.Type {
-	return g.elementType
+func (c *arrayCollection[T]) ToArray() []T {
+	return c.arr
 }
 
-func (g *arrayCollection) Iterator() IIterator {
-	return newCollectionIterator(g)
+func (c *arrayCollection[T]) IsEmpty() bool {
+	return c.Len() == 0
 }
 
-func (g *arrayCollection) ToArray(defaultArray ...interface{}) interface{} {
-	if (!g.v.IsValid() || (g.v.IsValid() && g.v.IsNil())) && len(defaultArray) > 0 {
-		return defaultArray[0]
-	}
-	return g.v.Interface()
+func (c *arrayCollection[T]) Stream() IStream[T] {
+	return FromCollection[T](c)
 }
 
 // removeFast swaps the element to remove with the last element, then shrinks the array size by one. The order of the elements is not ensured with this method
-func (g *arrayCollection) removeFast(index int) interface{} {
-	if index < 0 || index >= g.Len() {
-		return nil
-	}
-
-	last := g.v.Index(g.Len() - 1)
-	toRemove := g.v.Index(index)
-	ret := toRemove.Interface()
-	toRemove.Set(last)
-	g.v = g.v.Slice(0, g.Len()-1)
-	return ret
+func (c *arrayCollection[T]) removeFast(index int) (ret T) {
+	c.arr = append(c.arr[0:index], c.arr[index:]...)
+	last := c.arr[c.Len()-1]
+	ret = c.arr[index]
+	c.arr[index] = last
+	c.arr = c.arr[:len(c.arr)-1]
+	return
 }
 
 // removeKeepOrder creates a slice from the beginning of the slice up to the element before the provided index, then it creates another slice from the index+1 element to the end.
 // This function guarantees the original order of the elements but it can be a costly operation since the elements in the original slice need to be shifted one position below.
-func (g *arrayCollection) removeKeepOrder(index int) interface{} {
-	if index < 0 || index >= g.Len() {
-		return nil
-	}
-
-	ret := g.Index(index)
-	firstHalf := g.v.Slice(0, index)
-	secondHalf := g.v.Slice(index, g.Len())
-	g.v = reflect.Append(firstHalf, secondHalf)
-	return ret
+func (c *arrayCollection[T]) removeKeepOrder(index int) (ret T) {
+	ret = c.arr[index]
+	c.arr = append(c.arr[0:index], c.arr[index:]...)
+	return
 }

@@ -17,62 +17,60 @@ import (
 var testArray = []string{"peach", "apple", "pear", "plum", "pineapple", "banana", "kiwi", "orange"}
 
 func TestSample(t *testing.T) {
-	From(testArray).
-		Filter(func(v interface{}) bool {
-			return strings.HasPrefix(v.(string), "p")
+	From[string](testArray).
+		Filter(func(v string) bool {
+			return strings.HasPrefix(v, "p")
 		}).
-		OrderBy(func(a interface{}, b interface{}) int {
-			return strings.Compare(a.(string), b.(string))
-		}).
-		ForEach(func(x interface{}) {
-			println(x.(string))
+		Sort(strings.Compare).
+		ForEach(func(x string) {
+			println(x)
 		})
 }
 
 func TestStream_Contains(t *testing.T) {
-	contains := From(testArray).Contains("apple")
+	contains := From[string](testArray).Contains("apple")
 	assert.True(t, contains)
 }
 
 func TestStream_AllMatch(t *testing.T) {
-	var trueFunc = func(x interface{}) bool {
+	var trueFunc = func(x string) bool {
 		return true
 	}
 
-	var appleFunc = func(x interface{}) bool {
+	var appleFunc = func(x string) bool {
 		return "apple" == x
 	}
 
-	allMatch := From(testArray).AllMatch(trueFunc)
-	notAllMatch := From(testArray).AllMatch(appleFunc)
+	allMatch := From[string](testArray).AllMatch(trueFunc)
+	notAllMatch := From[string](testArray).AllMatch(appleFunc)
 	assert.True(t, allMatch)
 	assert.False(t, notAllMatch)
 }
 
 func TestStream_AnyMatch(t *testing.T) {
-	var appleFunc = func(x interface{}) bool {
+	var appleFunc = func(x string) bool {
 		return "apple" == x
 	}
 
-	match := From(testArray).AnyMatch(appleFunc)
+	match := From[string](testArray).AnyMatch(appleFunc)
 	assert.True(t, match)
 }
 
 func TestStream_NoneMatch(t *testing.T) {
-	var falseFunc = func(x interface{}) bool {
+	var falseFunc = func(x string) bool {
 		return false
 	}
 
-	noneMatch := From(testArray).NoneMatch(falseFunc)
+	noneMatch := From[string](testArray).NoneMatch(falseFunc)
 	assert.True(t, noneMatch)
 }
 
 func TestStream_Filter(t *testing.T) {
-	var appleFunc = func(x interface{}) bool {
+	var appleFunc = func(x string) bool {
 		return "apple" == x
 	}
 
-	stream := From(testArray).
+	stream := From[string](testArray).
 		Filter(appleFunc)
 
 	assert.Equal(t, 1, stream.Count())
@@ -80,11 +78,11 @@ func TestStream_Filter(t *testing.T) {
 }
 
 func TestStream_Except(t *testing.T) {
-	var appleFunc = func(x interface{}) bool {
+	var appleFunc = func(x string) bool {
 		return "apple" != x
 	}
 
-	stream := From(testArray).
+	stream := From[string](testArray).
 		Except(appleFunc)
 
 	assert.Equal(t, 1, stream.Count())
@@ -92,8 +90,8 @@ func TestStream_Except(t *testing.T) {
 }
 
 func TestStream_FirstAndLast(t *testing.T) {
-	stream := From(testArray)
-	emptyStream := From([]string{})
+	stream := From[string](testArray)
+	emptyStream := From[string]([]string{})
 
 	assert.Equal(t, 8, stream.Count())
 	assert.Equal(t, "peach", stream.First())
@@ -102,18 +100,19 @@ func TestStream_FirstAndLast(t *testing.T) {
 	assert.Equal(t, "orange", stream.Last("some-value"))
 
 	assert.Equal(t, 0, emptyStream.Count())
-	assert.Nil(t, emptyStream.First())
+	assert.Empty(t, emptyStream.First())
 	assert.Equal(t, "some-value", emptyStream.First("some-value"))
-	assert.Nil(t, emptyStream.Last())
+	assert.Empty(t, emptyStream.Last())
 	assert.Equal(t, "some-value", emptyStream.Last("some-value"))
 }
 
 func TestStream_MapFn(t *testing.T) {
-	mapFunc := func(i interface{}) interface{} {
+	mapFunc := func(i string) int {
 		return 5
 	}
 
-	stream := From(testArray).Map(mapFunc)
+	stream := Map[string, int](
+		From[string](testArray), mapFunc).Stream()
 
 	assert.Equal(t, len(testArray), stream.Count())
 	assert.Equal(t, 5, stream.First())
@@ -128,8 +127,8 @@ func TestStream_ForEach(t *testing.T) {
 
 	buffer2 := new(bytes.Buffer)
 
-	From(testArray).ForEach(func(v interface{}) {
-		buffer2.WriteString(v.(string))
+	From[string](testArray).ForEach(func(v string) {
+		buffer2.WriteString(v)
 	})
 
 	assert.Equal(t, buffer1.String(), buffer2.String())
@@ -152,9 +151,9 @@ func TestStream_ParallelForEach(t *testing.T) {
 		}
 	}
 
-	stream := From(bigArray)
-	stream.ParallelForEach(func(v interface{}) {
-		v.(*testObj).Processed = true
+	stream := From[*testObj](bigArray)
+	stream.ParallelForEach(func(v *testObj) {
+		v.Processed = true
 	}, 0)
 
 	for _, v := range bigArray {
@@ -165,6 +164,11 @@ func TestStream_ParallelForEach(t *testing.T) {
 // This test may fail when running with coverage with IntelliJ due to the coverage capture that may affect
 // the performance of go channels. Running normally on a 2 CPU host, demonstrates an efficiency of around 200% vs non-parallel.
 func TestStream_ParallelFiltering(t *testing.T) {
+	testParallelFiltering(t, 100, true)
+	testParallelFiltering(t, 50000, false)
+}
+
+func testParallelFiltering(t *testing.T, sampleSize int, sort bool) {
 	cores := getCores(-1)
 
 	// Skip this test if the machine only has one available CPU.
@@ -172,19 +176,18 @@ func TestStream_ParallelFiltering(t *testing.T) {
 		return
 	}
 
-	sampleSize := 5000000
 	bigArray := make([]int, sampleSize)
 
 	for i := 0; i < sampleSize; i++ {
 		bigArray[i] = rand.Intn(100)
 	}
 
-	filter1 := func(v interface{}) bool {
-		return v.(int) < 50
+	filter1 := func(v int) bool {
+		return v < 50
 	}
 
-	filter2 := func(v interface{}) bool {
-		return v.(int) < 10
+	filter2 := func(v int) bool {
+		return v > 10
 	}
 
 	const timesToTry = 5
@@ -194,11 +197,22 @@ func TestStream_ParallelFiltering(t *testing.T) {
 
 	for i := 0; i < timesToTry; i++ {
 		start := time.Now()
-		result1 := From(bigArray).Filter(filter1).Filter(filter2).ToArray().([]int)
+		var result1, result2 []int
+		if sort {
+			result1 = From[int](bigArray).Filter(filter1).Filter(filter2).Sort(ComparableFn[int]()).ToArray()
+		} else {
+			result1 = From[int](bigArray).Filter(filter1).Filter(filter2).ToArray()
+		}
+
 		elapsed1 := time.Since(start)
 
 		start = time.Now()
-		result2 := From(bigArray, -1).Filter(filter1).Filter(filter2).ToArray().([]int)
+		if sort {
+			result2 = From[int](bigArray, -1).Filter(filter1).Filter(filter2).Sort(ComparableFn[int]()).ToArray()
+		} else {
+			result2 = From[int](bigArray, -1).Filter(filter1).Filter(filter2).ToArray()
+		}
+
 		elapsed2 := time.Since(start)
 
 		if elapsed1 > elapsed2 {
@@ -209,35 +223,33 @@ func TestStream_ParallelFiltering(t *testing.T) {
 		avElapsed2 += elapsed2
 
 		// Validates than both results were the same
-		assert.Equal(t, len(result1), len(result2))
+		if sort {
+			assert.EqualValues(t, result1, result2)
+		} else {
+			assert.Equal(t, len(result1), len(result2))
+		}
 	}
 
-	fmt.Println("Non-Parallel Filtering average time: ", avElapsed1/timesToTry)
-	fmt.Println("Parallel Filtering average time:  ", avElapsed2/timesToTry)
-	fmt.Println("Parallel took", int64(100*avElapsed2/avElapsed1), "% of Non-Parallel time")
+	fmt.Printf("\n\nWith sample of %d and sorting:%v\n", sampleSize, sort)
+	fmt.Println("  Non-Parallel Filtering average time: ", avElapsed1/timesToTry)
+	fmt.Println("  Parallel Filtering average time:  ", avElapsed2/timesToTry)
+	fmt.Println("  Parallel took", int64(100*avElapsed2/avElapsed1), "% of Non-Parallel time")
+	println()
 
 	// Validates parallel filtering was faster than non-parallel
-	assert.True(t, avElapsed1/timesToTry > avElapsed2/timesToTry)
+	// assert.True(t, avElapsed1/timesToTry > avElapsed2/timesToTry)
 }
 
 func TestStream_OrderBy(t *testing.T) {
-	sortFn := func(a interface{}, b interface{}) int {
-		return strings.Compare(a.(string), b.(string))
-	}
-
 	expected := []string{"apple", "banana", "kiwi", "orange", "peach", "pear", "pineapple", "plum"}
-	sorted := From(testArray).OrderBy(sortFn).ToArray().([]string)
+	sorted := From[string](testArray).Sort(strings.Compare).ToArray()
 
 	assert.Equal(t, expected, sorted)
 }
 
 func TestStream_OrderByDesc(t *testing.T) {
-	sortFn := func(a interface{}, b interface{}) int {
-		return strings.Compare(a.(string), b.(string))
-	}
-
 	expected := []string{"plum", "pineapple", "pear", "peach", "orange", "kiwi", "banana", "apple"}
-	sorted := From(testArray).OrderBy(sortFn, true).ToArray().([]string)
+	sorted := From[string](testArray).Sort(strings.Compare, true).ToArray()
 
 	assert.Equal(t, expected, sorted)
 }
@@ -251,22 +263,13 @@ func TestStream_MapCollection(t *testing.T) {
 		"e": "111",
 	}
 
-	result := From(m).
-		Filter(func(i interface{}) bool {
-			// assert the elements in the filter are *KeyValuePair
-			assert.Equal(t, keyValuePairType, reflect.TypeOf(i))
-
-			pair := i.(*KeyValuePair)
-			return pair.Key.(string) != "d"
+	result := FromMap[string, string](m).
+		Filter(func(pair *KeyValuePair[string, string]) bool {
+			return pair.Key != "d"
 		}).
-		OrderBy(func(a interface{}, b interface{}) int {
-			// assert the elements in the filter are *KeyValuePair
-			assert.Equal(t, keyValuePairType, reflect.TypeOf(a))
-			assert.Equal(t, keyValuePairType, reflect.TypeOf(b))
-			aPair, bPair := a.(*KeyValuePair), b.(*KeyValuePair)
-
-			x, _ := strconv.Atoi(aPair.Value.(string))
-			y, _ := strconv.Atoi(bPair.Value.(string))
+		Sort(func(a, b *KeyValuePair[string, string]) int {
+			x, _ := strconv.Atoi(a.Value)
+			y, _ := strconv.Atoi(b.Value)
 			return x - y
 		}).
 		ToArray()
@@ -277,19 +280,42 @@ func TestStream_MapCollection(t *testing.T) {
 
 func TestStream_Distinct(t *testing.T) {
 	arr := append(testArray, "apple", "banana", "kiwi", "apple", "banana", "apple")
-	result := From(arr).Distinct().ToArray().([]string)
+	result := From[string](arr).Distinct().ToArray()
 
 	assert.Equal(t, len(result), len(testArray))
 }
 
 func TestStream_DistinctWithSort(t *testing.T) {
 	arr := append(testArray, "apple", "banana", "kiwi", "apple", "banana", "apple")
-	sortFn := func(a interface{}, b interface{}) int {
-		return strings.Compare(a.(string), b.(string))
-	}
-
 	expected := []string{"apple", "banana", "kiwi", "orange", "peach", "pear", "pineapple", "plum"}
-	sorted := From(arr).OrderBy(sortFn).Distinct().ToArray().([]string)
-
+	sorted := From[string](arr).Sort(strings.Compare).Distinct().ToArray()
 	assert.Equal(t, expected, sorted)
+}
+
+type testStruct struct {
+	A string
+	B int
+	C string
+}
+
+func TestMapToPtr(t *testing.T) {
+	arr := []testStruct{
+		{
+			A: "abcde",
+			B: 1234,
+			C: "zxcv",
+		},
+		{
+			A: "something",
+			B: 54321,
+			C: "something_else",
+		},
+	}
+	ret := MapToPtr[testStruct](arr)
+
+	sourceData, _ := json.Marshal(arr)
+	targetData, _ := json.Marshal(ret)
+	assert.JSONEq(t, string(sourceData), string(targetData))
+	assert.Equal(t, "[]streams.testStruct", reflect.TypeOf(arr).String())
+	assert.Equal(t, "[]*streams.testStruct", reflect.TypeOf(ret).String())
 }
