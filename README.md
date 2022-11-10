@@ -2,7 +2,19 @@
 
 This library provides
 - structs to easily represent and manage collections and iterable of elements which size are not necessarily defined.
-- Stream structs to support functional-style operations on streams of elements, such as map-reduce transformations on collections, filtering, sorting, mapping, foreach parallel operations.
+- Stream structs to support functional-style operations on streams of elements, such as map-reduce transformations on 
+collections, filtering, sorting, mapping, foreach parallel operations.
+
+---
+***(Nov 2022) Important Update:** This library has been redesigned to support **Golang Generics**, and it is not backwards 
+compatible with the previous version. Also requires at least Go 1.18. If you require the older version without generics 
+or a version that is compatible with an older version of Go, using Golang Modules you may get the latest stable version
+without generics by running the following command:*
+
+```bash
+go get github.com/jucardi/go-streams@v1.0.3
+```
+---
 
 ##### Quick Start
 
@@ -10,6 +22,16 @@ To keep up to date with the most recent version:
 
 ```bash
 go get github.com/jucardi/go-streams
+```
+
+Using Golang Modules
+```bash
+go get github.com/jucardi/go-streams@latest
+```
+
+For the latest version without Golang Generics (v1.0.3)
+```bash
+go get github.com/jucardi/go-streams@v1.0.3
 ```
 
 ##### Quick Overview
