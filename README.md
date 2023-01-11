@@ -26,7 +26,7 @@ go get github.com/jucardi/go-streams
 
 Using Golang Modules
 ```bash
-go get github.com/jucardi/go-streams@latest
+go get github.com/jucardi/go-streams/v2@latest
 ```
 
 For the latest version without Golang Generics (v1.0.3)
