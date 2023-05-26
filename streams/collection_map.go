@@ -9,7 +9,7 @@ var (
 	_ IAbstractCollection[*KeyValuePair[string, string]] = (*mapCollection[string, string])(nil)
 )
 
-type mapCollection[K, V comparable] struct {
+type mapCollection[K comparable, V any] struct {
 	*CollectionBase[*KeyValuePair[K, V]]
 	m    map[K]V
 	keys []K

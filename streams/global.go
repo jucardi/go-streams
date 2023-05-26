@@ -17,7 +17,7 @@ func From[T comparable](set any, threads ...int) (ret IStream[T]) {
 	panic("invalid source to create a stream")
 }
 
-func FromMap[K, V comparable](set any, threads ...int) (ret IStream[*KeyValuePair[K, V]]) {
+func FromMap[K comparable, V any](set any, threads ...int) (ret IStream[*KeyValuePair[K, V]]) {
 	switch val := set.(type) {
 	case []*KeyValuePair[K, V]:
 		return FromArray(val, threads...)
@@ -71,7 +71,7 @@ func NewList[T comparable](arr ...[]T) IList[T] {
 }
 
 // NewMap creates a new map collection of the given type
-func NewMap[K, V comparable](m ...map[K]V) IMap[K, V] {
+func NewMap[K comparable, V any](m ...map[K]V) IMap[K, V] {
 	ret := &mapCollection[K, V]{}
 	base := &CollectionBase[*KeyValuePair[K, V]]{}
 	base.SetAbstract(ret)

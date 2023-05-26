@@ -245,13 +245,13 @@ type IStream[T comparable] interface {
 }
 
 // KeyValuePair is a structure which contains a pair of key-values from a map
-type KeyValuePair[K, V comparable] struct {
+type KeyValuePair[K comparable, V any] struct {
 	Key   K
 	Value V
 }
 
 // IMap defines the contract for a generic map which also represents a collection of `*KeyValuePairs`
-type IMap[K, V comparable] interface {
+type IMap[K comparable, V any] interface {
 	IList[*KeyValuePair[K, V]]
 
 	// ToMap returns a map containing the elements contained by this instance
