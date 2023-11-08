@@ -37,7 +37,7 @@ type IIteratorWithPos[T any] interface {
 	Pos() int
 }
 
-// IIterable represent an iterable of elements in a set. By default Collections are considered iterables.
+// IIterable represent an iterable of elements in a set. By default, Collections are considered iterables.
 // Iterables do not require to have a defined size. They can represent a collection, a generator function, or an I/O channel.
 type IIterable[T any] interface {
 	// Iterator returns a new collection iterator for the iterable
