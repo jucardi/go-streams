@@ -20,7 +20,7 @@ type Stream[T comparable] struct {
 	distinct bool
 	threads  int
 
-	current ICollection[T]
+	processed ICollection[T]
 }
 
 type sortFunc[T comparable] struct {
@@ -77,41 +77,45 @@ func (s *Stream[T]) Last(defaultValue ...T) T {
 
 func (s *Stream[T]) At(index int, defaultValue ...T) (ret T) {
 	iterable := s.process()
-	if iterable == nil {
+	if iterable == nil || index < 0 || index >= iterable.Len() {
+		if len(defaultValue) > 0 {
+			return defaultValue[0]
+		}
 		return
 	}
 	iterator := iterable.Iterator()
 	iterator.Skip(index)
-
-	var defaultV T
-	ret = iterator.Current()
-	if ret == defaultV && len(defaultValue) > 0 {
-		return defaultValue[0]
-	}
-	return
+	return iterator.Current()
 }
 
 func (s *Stream[T]) AtReverse(pos int, defaultValue ...T) (ret T) {
 	iterable := s.process()
-	iterator := iterable.Iterator()
+	if iterable == nil {
+		if len(defaultValue) > 0 {
+			return defaultValue[0]
+		}
+		return
+	}
 
 	i := iterable.Len() - 1 - pos
 
-	if i >= 0 {
-		iterator.Skip(i)
-		ret = iterator.Current()
+	if i < 0 || i >= iterable.Len() {
+		if len(defaultValue) > 0 {
+			return defaultValue[0]
+		}
+		return
 	}
 
-	var defaultV T
-	if ret == defaultV && len(defaultValue) > 0 {
-		return defaultValue[0]
-	}
-
-	return
+	iterator := iterable.Iterator()
+	iterator.Skip(i)
+	return iterator.Current()
 }
 
 func (s *Stream[T]) Count() int {
 	iterable := s.process()
+	if iterable == nil {
+		return 0
+	}
 
 	if iterable.Len() >= 0 {
 		return iterable.Len()
@@ -139,11 +143,17 @@ func (s *Stream[T]) Contains(value T) bool {
 
 func (s *Stream[T]) AnyMatch(f ConditionalFunc[T]) bool {
 	iterable := s.process()
+	if iterable == nil {
+		return false
+	}
 	return anyMatch[T](iterable, 0, iterable.Len(), f, false)
 }
 
 func (s *Stream[T]) AllMatch(f ConditionalFunc[T]) bool {
 	iterable := s.process()
+	if iterable == nil {
+		return true
+	}
 	return !anyMatch[T](iterable, 0, iterable.Len(), f, true)
 }
 
@@ -156,37 +166,47 @@ func (s *Stream[T]) NoneMatch(f ConditionalFunc[T]) bool {
 }
 
 func (s *Stream[T]) IfEmpty() IThen[T] {
+	iterable := s.process()
 	return &thenWrapper[T]{
-		conditionMet: s.Count() == 0,
-		stream:       FromCollection[T](s.current),
+		conditionMet: iterable == nil || iterable.Len() == 0,
+		stream:       s.streamFromProcessed(iterable),
 	}
 }
 
 func (s *Stream[T]) IfAnyMatch(f ConditionalFunc[T]) IThen[T] {
 	return &thenWrapper[T]{
 		conditionMet: s.AnyMatch(f),
-		stream:       FromCollection[T](s.current),
+		stream:       s.streamFromProcessed(s.processed),
 	}
 }
 
 func (s *Stream[T]) IfAllMatch(f ConditionalFunc[T]) IThen[T] {
 	return &thenWrapper[T]{
 		conditionMet: s.AllMatch(f),
-		stream:       FromCollection[T](s.current),
+		stream:       s.streamFromProcessed(s.processed),
 	}
 }
 
 func (s *Stream[T]) IfNoneMatch(f ConditionalFunc[T]) IThen[T] {
 	return &thenWrapper[T]{
 		conditionMet: s.NoneMatch(f),
-		stream:       FromCollection[T](s.current),
+		stream:       s.streamFromProcessed(s.processed),
 	}
+}
+
+func (s *Stream[T]) streamFromProcessed(iterable ICollection[T]) IStream[T] {
+	if iterable == nil {
+		return FromCollection[T](NewList[T]())
+	}
+	return FromCollection[T](iterable)
 }
 
 func (s *Stream[T]) ForEach(f IterFunc[T]) {
 	iterable := s.process()
+	if iterable == nil {
+		return
+	}
 	iterator := iterable.Iterator()
-
 	iterator.ForEachRemaining(f)
 }
 
@@ -194,6 +214,10 @@ func (s *Stream[T]) ParallelForEach(f IterFunc[T], threads int, skipWait ...bool
 	var wg sync.WaitGroup
 	cores := getCores(threads)
 	iterable := s.process()
+
+	if iterable == nil || iterable.Len() == 0 {
+		return
+	}
 
 	if iterable.Len() < cores {
 		cores = iterable.Len()
@@ -242,6 +266,9 @@ func (s *Stream[T]) ToIterable() IIterable[T] {
 
 func (s *Stream[T]) ToList() IList[T] {
 	col := s.ToCollection()
+	if col == nil {
+		return NewList[T]()
+	}
 	switch ret := col.(type) {
 	case IList[T]:
 		return ret
@@ -250,12 +277,138 @@ func (s *Stream[T]) ToList() IList[T] {
 }
 
 func (s *Stream[T]) ToDistinct() ISet[T] {
-	return s.Distinct().ToCollection().(ISet[T])
+	s.distinct = true
+	iterable := s.process()
+	if iterable == nil {
+		return NewSet[T]()
+	}
+	if setVal, ok := iterable.(ISet[T]); ok {
+		return setVal
+	}
+	ret := NewSet[T]()
+	ret.Add(iterable.ToArray()...)
+	return ret
+}
+
+func (s *Stream[T]) Skip(n int) IStream[T] {
+	if n <= 0 {
+		return s
+	}
+	prev := s.process()
+	if prev == nil {
+		return FromCollection[T](NewList[T]())
+	}
+	arr := prev.ToArray()
+	if n >= len(arr) {
+		return FromCollection[T](NewList[T]())
+	}
+	return FromCollection[T](NewList[T](arr[n:]))
+}
+
+func (s *Stream[T]) Limit(n int) IStream[T] {
+	if n <= 0 {
+		return FromCollection[T](NewList[T]())
+	}
+	prev := s.process()
+	if prev == nil {
+		return FromCollection[T](NewList[T]())
+	}
+	arr := prev.ToArray()
+	if n >= len(arr) {
+		return FromCollection[T](prev)
+	}
+	return FromCollection[T](NewList[T](arr[:n]))
+}
+
+func (s *Stream[T]) Reverse() IStream[T] {
+	prev := s.process()
+	if prev == nil {
+		return FromCollection[T](NewList[T]())
+	}
+	arr := prev.ToArray()
+	reversed := make([]T, len(arr))
+	for i, v := range arr {
+		reversed[len(arr)-1-i] = v
+	}
+	return FromCollection[T](NewList[T](reversed))
+}
+
+func (s *Stream[T]) Peek(f IterFunc[T]) IStream[T] {
+	prev := s.process()
+	if prev == nil {
+		return FromCollection[T](NewList[T]())
+	}
+	arr := prev.ToArray()
+	for _, v := range arr {
+		f(v)
+	}
+	return FromCollection[T](NewList[T](arr))
+}
+
+func (s *Stream[T]) TakeWhile(f ConditionalFunc[T]) IStream[T] {
+	prev := s.process()
+	if prev == nil {
+		return FromCollection[T](NewList[T]())
+	}
+	var result []T
+	for _, v := range prev.ToArray() {
+		if !f(v) {
+			break
+		}
+		result = append(result, v)
+	}
+	return FromCollection[T](NewList[T](result))
+}
+
+func (s *Stream[T]) SkipWhile(f ConditionalFunc[T]) IStream[T] {
+	prev := s.process()
+	if prev == nil {
+		return FromCollection[T](NewList[T]())
+	}
+	arr := prev.ToArray()
+	skipping := true
+	var result []T
+	for _, v := range arr {
+		if skipping && f(v) {
+			continue
+		}
+		skipping = false
+		result = append(result, v)
+	}
+	return FromCollection[T](NewList[T](result))
+}
+
+func (s *Stream[T]) Chunk(size int) [][]T {
+	if size <= 0 {
+		return nil
+	}
+	prev := s.process()
+	if prev == nil {
+		return nil
+	}
+	arr := prev.ToArray()
+	var chunks [][]T
+	for i := 0; i < len(arr); i += size {
+		end := i + size
+		if end > len(arr) {
+			end = len(arr)
+		}
+		chunk := make([]T, end-i)
+		copy(chunk, arr[i:end])
+		chunks = append(chunks, chunk)
+	}
+	return chunks
 }
 
 func (s *Stream[T]) process() ICollection[T] {
+	if s.processed != nil {
+		return s.processed
+	}
+
 	if s.threads != 1 {
-		return s.parallelProcess(s.threads)
+		result := s.parallelProcess(s.threads)
+		s.processed = result
+		return result
 	}
 
 	iterable := s.iterable
@@ -264,12 +417,15 @@ func (s *Stream[T]) process() ICollection[T] {
 	}
 	iterable = s.filter(iterable)
 	iterable = s.sort(iterable)
-	s.current = iterable
+	s.processed = iterable
 	return iterable
 }
 
 func (s *Stream[T]) parallelProcess(threads int) ICollection[T] {
 	iterable := s.iterable
+	if iterable == nil {
+		return nil
+	}
 	iterable = s.parallelProcessHandler(iterable, threads)
 	iterable = s.sort(iterable)
 	return iterable
@@ -281,7 +437,7 @@ func (s *Stream[T]) filter(iterable ICollection[T]) ICollection[T] {
 
 func (s *Stream[T]) iterHandler(iterable ICollection[T], start, end int) ICollection[T] {
 	if len(s.filters) == 0 && !s.distinct {
-		return s.iterable
+		return iterable
 	}
 
 	var ret ICollection[T]
@@ -315,6 +471,10 @@ func (s *Stream[T]) iterHandler(iterable ICollection[T], start, end int) ICollec
 }
 
 func (s *Stream[T]) parallelProcessHandler(iterable ICollection[T], threads int) ICollection[T] {
+	if len(s.filters) == 0 && !s.distinct {
+		return iterable
+	}
+
 	worker := func(result chan ICollection[T], start, end int) {
 		result <- s.iterHandler(iterable, start, end)
 	}
@@ -324,6 +484,10 @@ func (s *Stream[T]) parallelProcessHandler(iterable ICollection[T], threads int)
 
 	if iterable.Len() < cores {
 		cores = iterable.Len()
+	}
+
+	if cores <= 0 {
+		return ret
 	}
 
 	sliceSize := int(math.Ceil(float64(iterable.Len()) / float64(cores)))
@@ -414,26 +578,3 @@ func getCores(threads ...int) int {
 	}
 	return threads[0]
 }
-
-// TODO:
-//
-// STREAM
-//   Reverse
-
-// OPTIONAL ?? or element
-//    Min
-//    Max
-//    Average
-//    FindAny                  For parallel operations. Post MVP
-
-// Concat --> Concatenates two sequences
-// Reduce, Aggregate       --->   Sum, min, max, average, string concatenation, with and without seed value
-// Skip(long n) -> skips the first N elements.
-// Peek -> iterates and does something returning back the stream. Mainly for debugging
-// Limit -> limits the size of the stream.
-
-// GROUP OPERATIONS
-//    GroupBy
-//    GroupJoin
-//    Intersect    (default equals or with comparer function)
-//    Union

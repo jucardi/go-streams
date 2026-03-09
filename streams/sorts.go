@@ -20,11 +20,11 @@ func ComparableFn[T ISortable](desc ...bool) SortFunc[T] {
 func Sort[T ISortable](arr []T, desc ...bool) {
 	d := len(desc) > 0 && desc[0]
 
-	sort.SliceIsSorted(arr, func(i, j int) bool {
+	sort.Slice(arr, func(i, j int) bool {
 		if d {
-			return arr[i] < arr[j]
+			return arr[i] > arr[j]
 		}
-		return arr[i] > arr[j]
+		return arr[i] < arr[j]
 	})
 }
 

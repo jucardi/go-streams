@@ -48,7 +48,9 @@ func (c *set[T]) Add(items ...T) bool {
 func (c *set[T]) AddFromIterator(iterator IIterator[T]) bool {
 	ret := false
 	iterator.ForEachRemaining(func(item T) {
-		ret = ret || c.Add(item)
+		if c.Add(item) {
+			ret = true
+		}
 	})
 	return ret
 }
@@ -68,7 +70,9 @@ func (c *set[T]) Remove(items ...T) bool {
 func (c *set[T]) RemoveFromIterator(iterator IIterator[T]) bool {
 	ret := false
 	iterator.ForEachRemaining(func(item T) {
-		ret = ret || c.Remove(item)
+		if c.Remove(item) {
+			ret = true
+		}
 	})
 	return ret
 }
@@ -119,6 +123,8 @@ func (c *set[T]) Len() int {
 }
 
 func (c *set[T]) Clear() {
+	c.mx.Lock()
+	defer c.mx.Unlock()
 	c.m = map[T]struct{}{}
 }
 

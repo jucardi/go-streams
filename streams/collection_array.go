@@ -58,11 +58,10 @@ func (c *arrayCollection[T]) Stream() IStream[T] {
 	return FromCollection[T](c)
 }
 
-// removeFast swaps the element to remove with the last element, then shrinks the array size by one. The order of the elements is not ensured with this method
+// removeFast swaps the element to remove with the last element, then shrinks the array size by one. The order of the elements is not ensured with this method.
 func (c *arrayCollection[T]) removeFast(index int) (ret T) {
-	c.arr = append(c.arr[0:index], c.arr[index:]...)
-	last := c.arr[c.Len()-1]
 	ret = c.arr[index]
+	last := c.arr[c.Len()-1]
 	c.arr[index] = last
 	c.arr = c.arr[:len(c.arr)-1]
 	return
@@ -72,6 +71,6 @@ func (c *arrayCollection[T]) removeFast(index int) (ret T) {
 // This function guarantees the original order of the elements but it can be a costly operation since the elements in the original slice need to be shifted one position below.
 func (c *arrayCollection[T]) removeKeepOrder(index int) (ret T) {
 	ret = c.arr[index]
-	c.arr = append(c.arr[0:index], c.arr[index:]...)
+	c.arr = append(c.arr[0:index], c.arr[index+1:]...)
 	return
 }

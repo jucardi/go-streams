@@ -121,13 +121,7 @@ type ISet[T comparable] interface {
 // IStream defines the functions of a stream implementation
 type IStream[T comparable] interface {
 	// SetThreads Sets the amount of go channels to be used for parallel filtering. Providing a value <= 0, indicates the
-	// maximum amount of available CPUs will be the number that determines
-	// the amount of go channels to be used. If order matters, best combine it with a `SortBy`. Only needs to be provided once
-	// per stream.
-	// - threads: If provided, enables parallel filtering for all filter operations. Indicates the amount of go channels
-	//            to be used. <= 0 indicates the maximum amount of available CPUs will be the number that determines the
-	//            amount of go channels to be used. If order matters,
-	//            best combine it with a `SortBy`. Only needs to be provided once per stream.
+	// maximum amount of available CPUs will be the number that determines the amount of go channels to be used.
 	SetThreads(threads int) IStream[T]
 
 	// Filter appends a filtering function to the stream, where any element that does not meet the condition provided by
@@ -139,12 +133,31 @@ type IStream[T comparable] interface {
 	Except(f ConditionalFunc[T]) IStream[T]
 
 	// Sort sorts the elements in the stream using the provided comparable function.
-	//
-	// - desc:  indicates whether the sorting should be done descendant
 	Sort(f SortFunc[T], desc ...bool) IStream[T]
 
 	// Distinct ensures that the finalizing operation of the stream includes only unique elements
 	Distinct() IStream[T]
+
+	// Skip discards the first n elements from the resulting stream and returns a new stream with the remaining elements.
+	Skip(n int) IStream[T]
+
+	// Limit returns a new stream containing at most n elements from the resulting stream.
+	Limit(n int) IStream[T]
+
+	// Reverse returns a new stream with the elements in reverse order.
+	Reverse() IStream[T]
+
+	// Peek performs the provided action on each element without consuming the stream, returning a new stream with the same elements.
+	Peek(f IterFunc[T]) IStream[T]
+
+	// TakeWhile returns a new stream containing elements from the start as long as the condition is true, stopping at the first false.
+	TakeWhile(f ConditionalFunc[T]) IStream[T]
+
+	// SkipWhile skips elements from the start as long as the condition is true, then returns a new stream with the remaining elements.
+	SkipWhile(f ConditionalFunc[T]) IStream[T]
+
+	// Chunk splits the stream into slices of the given size and returns them as a [][]T.
+	Chunk(size int) [][]T
 
 	// First Returns the first element of the resulting stream.
 	// Returns default T if the resulting stream is empty (or defaultValue if provided)
@@ -169,75 +182,49 @@ type IStream[T comparable] interface {
 	IsEmpty() bool
 
 	// Contains indicates whether the provided value matches any of the values in the stream
-	//
-	// - value:   The value to be found.
 	Contains(value T) bool
 
 	// AnyMatch Indicates whether any elements of the stream match the given condition function.
-	//
-	// - f:       The matching function to be used.
 	AnyMatch(f ConditionalFunc[T]) bool
 
 	// AllMatch Indicates whether ALL elements of the stream match the given condition function
-	//
-	// - f:       The matching function to be used.
 	AllMatch(f ConditionalFunc[T]) bool
 
-	// NotAllMatch is the negation of `AllMatch`. If any of the elements do not match the provided condition the result
-	// will be `true`; `false` otherwise.
-	//
-	// - f:       The matching function to be used.
+	// NotAllMatch is the negation of AllMatch. If any of the elements do not match the provided condition the result
+	// will be true; false otherwise.
 	NotAllMatch(f ConditionalFunc[T]) bool
 
 	// NoneMatch indicates whether NONE of elements of the stream match the given condition function.
-	//
-	// - f:       The matching function to be used.
 	NoneMatch(f ConditionalFunc[T]) bool
 
-	// IfEmpty returns a `Then` handler where actions like `Then` or `Else` can be triggered if the stream empty
+	// IfEmpty returns a Then handler where actions like Then or Else can be triggered if the stream is empty
 	IfEmpty() IThen[T]
 
-	// IfAnyMatch returns a `Then` handler where actions like `Then` or `Else` can be triggered if any element match the
-	// provided condition based on what the result of `AnyMatch` would return
-	//
-	// - f:       The matching function to be used.
+	// IfAnyMatch returns a Then handler triggered if any element matches the provided condition
 	IfAnyMatch(f ConditionalFunc[T]) IThen[T]
 
-	// IfAllMatch returns a `Then` handler where actions like `Then` or `Else` can be triggered if all elements match the
-	// provided condition based on what the result of `AllMatch` would return
-	//
-	// - f:       The matching function to be used.
+	// IfAllMatch returns a Then handler triggered if all elements match the provided condition
 	IfAllMatch(f ConditionalFunc[T]) IThen[T]
 
-	// IfNoneMatch returns a `Then` handler where actions like `Then` or `Else` can be triggered if no elements match the
-	// provided condition based on what the result of `NoneMatch` would return
-	//
-	// - f:       The matching function to be used.
+	// IfNoneMatch returns a Then handler triggered if no elements match the provided condition
 	IfNoneMatch(f ConditionalFunc[T]) IThen[T]
 
 	// ForEach iterates over all elements in the stream calling the provided function.
 	ForEach(f IterFunc[T])
 
-	// ParallelForEach Iterates over all elements in the stream calling the provided function. Creates multiple go channels to parallelize
-	// the operation. ParallelForeach does not use any thread values previously provided in any filtering method nor enables parallel filtering
-	// if any filtering is done prior to the `ParallelForEach` phase. Only use `ParallelForEach` if the order in which the elements are processed
-	// does not matter, otherwise see `ForEach`.
-	//
-	// - threads:   Indicates the amount of go channels to be used to a maximum of the available CPUs in the host machine. <= 0 indicates
-	//              the maximum amount of available CPUs will be the number that determines the amount of go channels to be used.
-	// - skipWait:  Indicates whether `ParallelForEach` will wait until all channels are done processing.
+	// ParallelForEach iterates over all elements in parallel. Use only when processing order does not matter.
 	ParallelForEach(f IterFunc[T], threads int, skipWait ...bool)
 
 	// ToArray Returns an array of elements from the resulting stream
 	ToArray() []T
 
-	// ToCollection returns a `ICollection` of elements from the resulting stream
+	// ToCollection returns a ICollection of elements from the resulting stream
 	ToCollection() ICollection[T]
 
-	// ToIterable returns a `IIterable` of elements from the resulting stream
+	// ToIterable returns a IIterable of elements from the resulting stream
 	ToIterable() IIterable[T]
 
-	// ToList returns a `IList` of elements from the resulting stream
+	// ToList returns a IList of elements from the resulting stream
 	ToList() IList[T]
 
 	// ToDistinct processes the stream and outputs a set of unique values

@@ -71,7 +71,7 @@ Here we use an array of string as the source of the stream, perform a filter ope
 receives a single element of the collection and determines whether the element should remain in the stream by returning
 a boolean.
 
-Now let's do a simple forach operation
+Now let's do a simple foreach operation
 
 ```go
 streams.
@@ -91,7 +91,7 @@ we'll obtain the following output in the console
 peach
 pear
 plum
-pineaple
+pineapple
 ```
 
 ## About the go-streams
@@ -111,19 +111,17 @@ side-effect-producing) operations. Intermediate operations are always lazy.
 - Consumable. The elements of a stream are only visited once during the life of a stream. Like an Iterator, a new stream
 must be generated to revisit the same elements of the source.
 
-Currently Streams can be obtained in two ways:
-- From an array via `streams.FromArray[T comparable](array []T)`, where the `array` parameter can be any array or slice
-implementation.
+Currently Streams can be obtained in several ways:
+- From an array via `streams.FromArray[T comparable](array []T)`
 - From an implementation of `streams.ICollection[T comparable]` via `streams.FromCollection[T comparable](col ICollection[T])`
-
-**NOTE:** There is a global function `From[T comparable]` that accepts any value and properly creates the stream depending
-on whether it is an array or a collection. However it panics if the input is neither.
+- From a map via `streams.FromMap[K comparable, V any](m map[K]V)`
+- Using the generic `streams.From[T comparable](set any)` which accepts arrays or collections
 
 ## Stream operations and pipelines
 
 Stream operations are divided into intermediate and terminal operations, and are combined to form stream pipelines. A 
 stream pipeline consists of a source (such as an iterable, a collection, an array, a generator function, or an I/O 
-channel); followed by zero or more intermediate operations such as `Filter()`, `Exclude()` or `Sort()` and a terminal
+channel); followed by zero or more intermediate operations such as `Filter()`, `Except()` or `Sort()` and a terminal
 operation such as `ForEach()` or `First()`
 
 Intermediate operations return a stream. They are always lazy; executing an intermediate operation such as `Filter()`
@@ -139,12 +137,21 @@ the data source and processing of the pipeline before returning
 
 ### Intermediate operations
 
-- `Filter(function (x T) bool)`: Filters any element that does not meet the condition provided by the function.
-- `Except(function (x T) bool)`: Filters all elements that meet the condition provided by the function.
-- `Sort(function (x, y T) int, desc ...bool)`: Sorts the elements ascending in the stream using the provided comparable
-  function.
-- `SetThreads(threads int)`: Sets the number of threads to be used when processing the stream
-- `Distinct()`: Ensures that the resulting stream operation only includes unique values
+- `Filter(f func(x T) bool)`: Filters any element that does not meet the condition provided by the function.
+- `Except(f func(x T) bool)`: Filters all elements that meet the condition provided by the function.
+- `Sort(f func(x, y T) int, desc ...bool)`: Sorts the elements in the stream using the provided comparable function.
+- `SetThreads(threads int)`: Sets the number of threads to be used when processing the stream.
+- `Distinct()`: Ensures that the resulting stream operation only includes unique values.
+- `Skip(n int)`: Discards the first `n` elements from the resulting stream and returns a new stream with the remaining
+  elements.
+- `Limit(n int)`: Returns a new stream containing at most `n` elements from the resulting stream.
+- `Reverse()`: Returns a new stream with the elements in reverse order.
+- `Peek(f func(x T))`: Performs the provided action on each element without consuming the stream, returning a new stream
+  with the same elements. Useful for debugging or logging.
+- `TakeWhile(f func(x T) bool)`: Returns a new stream containing elements from the start as long as the condition
+  returns true. Stops at the first element that does not match.
+- `SkipWhile(f func(x T) bool)`: Skips elements from the start as long as the condition returns true, then returns a
+  new stream with all remaining elements.
 
 
 ### Terminal operations
@@ -160,17 +167,18 @@ defaultValue if provided) if out of bounds.
 the first in the resulting stream. Returns default T (or defaultValue if provided) if out of bounds.
 
 ###### Collection returns
-- `ToArray()`: Returns an array of elements from the resulting stream
-- `ToCollection()`: Returns a `ICollection[T]` of elements from the resulting stream
-- `ToIterable()`: Returns a `IIterable[T]` of elements from the resulting stream
-- `ToList()`: Returns a `IList[T]` of elements from the resulting stream
-- `ToDistinct()`: Returns a `ISet[T]` of elements from the resulting stream with only unique values
+- `ToArray()`: Returns an array of elements from the resulting stream.
+- `ToCollection()`: Returns a `ICollection[T]` of elements from the resulting stream.
+- `ToIterable()`: Returns a `IIterable[T]` of elements from the resulting stream.
+- `ToList()`: Returns a `IList[T]` of elements from the resulting stream.
+- `ToDistinct()`: Returns a `ISet[T]` of elements from the resulting stream with only unique values.
+- `Chunk(size int)`: Splits the stream into slices of the given size and returns them as a `[][]T`.
 
 ###### Boolean returns
-- `IsEmpty()`: Indicates whether the resulting stream contains no elements
+- `IsEmpty()`: Indicates whether the resulting stream contains no elements.
 - `Contains(value T)`: Indicates whether the provided value matches any of the values in the stream.
 - `AnyMatch(f func(x T) bool)`: Indicates whether ANY elements of the stream match the given condition function.
-- `AllMatch(f func(x T) bool)`: Indicates whether ALL elements of the stream match the given condition function
+- `AllMatch(f func(x T) bool)`: Indicates whether ALL elements of the stream match the given condition function.
 - `NotAllMatch(f func(x T) bool)`: The negation of `AllMatch`. If any of the elements do not match the provided
 condition the result will be `true`; `false` otherwise.
 - `NoneMatch(f func(x T) bool)`: Indicates whether NONE of elements of the stream match the given condition
@@ -186,24 +194,24 @@ streams.
     FromArray[T](array). 
     Filter(filterHandler).
     Filter(anotherFilterHandle).
-    Sort(sorterHandler)
+    Sort(sorterHandler).
     IfEmpty().
-    Then(func (resultStream IStream[T] { 
+    Then(func(resultStream IStream[T]) { 
         // Do something if empty
     }).
-    Else(func (resultStream IStream[T] { 
+    Else(func(resultStream IStream[T]) { 
         // Do something if not empty
     })
 ```
 
-- `IfEmpty()`: Returns a `IThen[T]` handler if empty
-- `IfAnyMatch(f ConditionalFunc[T])`: Returns a `IThen[T]` handler if any elements match the provided condition
-- `IfAllMatch(f ConditionalFunc[T])`: Returns a `IThen[T]` handler if all elements match the provided condition
-- `IfNoneMatch(f ConditionalFunc[T])`: Returns a `IThen[T]` handler if none elements match the provided condition
+- `IfEmpty()`: Returns a `IThen[T]` handler if empty.
+- `IfAnyMatch(f ConditionalFunc[T])`: Returns a `IThen[T]` handler if any elements match the provided condition.
+- `IfAllMatch(f ConditionalFunc[T])`: Returns a `IThen[T]` handler if all elements match the provided condition.
+- `IfNoneMatch(f ConditionalFunc[T])`: Returns a `IThen[T]` handler if no elements match the provided condition.
 
 ###### Void returns
 - `ForEach(f func(x T))`: Iterates over all elements in the stream calling the provided function.
-- `ParallelForEach(c T), threads int, skipWait ...bool)`: Iterates over all elements in the stream calling the provided
+- `ParallelForEach(f func(x T), threads int, skipWait ...bool)`: Iterates over all elements in the stream calling the provided
 function. Creates multiple go channels to parallelize the operation. ParallelForeach does not use any thread values 
 previously provided in any filtering method nor enables parallel filtering if any filtering is done prior to the 
 `ParallelForEach` phase. Only use `ParallelForEach` if the order in which the elements are processed does not matter, 
@@ -212,170 +220,194 @@ otherwise see `ForEach`.
 ###### Int returns
 - `Count()`: Counts the elements contained by the resulting stream.
 
-### Mapping functions
+### Standalone functions
 
-In previous versions of this library, there was a `Map()` function that would help to convert the elements of the initial
-type of the stream into something else (E.g: array of strings to integers)
+These functions operate on sources (arrays, collections, iterators, or streams) and produce results. They are standalone
+because Go generics do not allow adding additional type parameters to methods on interfaces/structs.
 
-This library was updated in favor of Golang Generics to avoid having to work with `interface{}` and `reflect`. However,
-Golang Generics do not support adding additional generic types to functions that are defined in interfaces or structs,
-so the `Map` function cannot be invoked from the stream since it cannot accept the target type of the conversion.
+#### Mapping functions
 
-For this reason, the `Map` function was moved as a static function in this package, and new mapping functions were added
-to simplify some mapping invocations
+- `Map[From, To comparable](source any, f ConvertFunc[From, To]) IList[To]`: Maps the elements of the source to new
+elements using the mapping function. Outputs a new `IList` with the converted elements. Accepted sources: `[]From`,
+`IIterable[From]`, `IIterator[From]`, `IStream[From]`.
 
-The current mapping functions built-in this package are:
+- `MapNonComparable[From, To any](source any, f ConvertFunc[From, To]) []To`: Similar to `Map`, but outputs an array
+and accepts non-comparable types. Accepted sources: `[]From`, `IIterable[From]`, `IIterator[From]`.
 
-- `Map[From, To comparable](source any, f ConvertFunc[From, To]) IList[To]`: Map maps the elements of the source to a new
-element, using the mapping function provided. Outputs a new IList with the converted elements. This function accepts the
-following sources where `From` and `To` are `comparable` types:
-  - `[]From`
-  - `IIterable[From]`
-  - `ICollection[From]`
-  - `IList[From]`
-  - `IIterator[From]`
-  - `IStream[From]`
+- `MapToPtr[T any](source any) []*T`: Converts a collection of `T` to `[]*T`. Useful for non-comparable structs since
+pointers are always comparable and can be used with `IStream`, `ICollection`, etc.
 
+#### Reduce / Aggregate
 
+- `Reduce[T comparable](source any, identity T, f func(T, T) T) T`: Folds all elements into a single value using the
+accumulator function, starting from the identity value.
 
-- `MapNonComparable[From, To any](source any, f ConvertFunc[From, To]) []To`: This function is similar to `Map`, maps
-the elements of the source to a new element, using the mapping function provided. Outputs an array containing the mapped
-elements instead of a collection, and unlike `Map` the source accepts non-comparable types. This function accepts the
-following sources where `From` and `To` accept any type including non-comparable:
-  - `[]From`
-  - `IIterable[From]`
-  - `ICollection[From]`
-  - `IList[From]`
-  - `IIterator[From]`
-
-
-- `MapToPtr[T any](source any) []*T`: Converts a collection of `T` to a collection of `*T`. Many structs are not `comparable`
-which makes `T` unsupported by `IStream`, `ICollection`, `IList` and `ISet`. Pointers however are considered comparable,
-so this function outputs an array of `*T` which can be used in the types mentioned.
-
-###### Examples:
-*1. Mapping from a stream*
 ```go
-// Given the following source array of number strings
-sourceArray := []string{"1", "5", "8", "100", "23", "6", "abc"}
+sum := streams.Reduce[int]([]int{1, 2, 3, 4}, 0, func(acc, x int) int { return acc + x })
+// sum = 10
+```
 
-mappedList := streams.Map[string, int](   
-    streams.                            
-        From[string](sourceArray).      // The source stream for the mapping with any stream functions needed prior to
-        Filter(func(x string) bool {    // be processed for mapping. In this example, all items that cannot be parsed to
-            _, err := strconv.Atoi(x)   // an int will be filtered
-            return err == nil
-        }),
-    func(item string) int {             // The mapping function
-        ret, _ := strconv.Atoi(x)
-        return ret
-    }
+- `ReduceAny[T comparable, R any](source any, identity R, f func(R, T) R) R`: Like `Reduce` but allows the accumulator
+to be a different type than the elements.
+
+```go
+csv := streams.ReduceAny[int, string]([]int{1, 2, 3}, "", func(acc string, x int) string {
+    if acc != "" { acc += "," }
+    return acc + strconv.Itoa(x)
 })
+// csv = "1,2,3"
 ```
-*2. Using the mapping result as a stream to continue processing*
-```go
-// Given the following source array of number strings
-sourceArray := []string{"1", "5", "8", "100", "23", "6", "abc"}
 
-mappedList := streams.Map[string, int](   
-    sourceArray,                       // Using the array as the source instead of a stream
-    func(item string) int {            // The mapping function
-        ret, _ := strconv.Atoi(x)
-        return ret                     // for any elements that cannot be converted to int, returns default int (0)
-    }
-}).
-    ToStream().                        // Obtain a stream from the resulting list
-    Filter(func (x int) bool {         // Apply any stream functions to the new stream
-        return x > 0
-    }).
-    ToList()
+#### FlatMap
+
+- `FlatMap[From, To comparable](source any, f func(From) []To) IList[To]`: Maps each element to a slice and flattens
+the results into a single `IList`.
+
+```go
+result := streams.FlatMap[string, string]([]string{"hello", "world"}, func(s string) []string {
+    var chars []string
+    for _, c := range s { chars = append(chars, string(c)) }
+    return chars
+})
+// result contains ["h", "e", "l", "l", "o", "w", "o", "r", "l", "d"]
 ```
-*3. Mapping using the `MapNoComparable` function*
+
+#### Concat
+
+- `Concat[T comparable](sources ...any) IStream[T]`: Concatenates multiple sources (arrays, collections, or streams)
+into a single stream.
+
 ```go
-// Given the following struct
-type SomeStruct struct {
-    Name       string
-    Score      int
-    StringFn   func() string
-}
-
-// And given the following array
-arr := []SomeStruct{
-    {
-        Name: "abcd",
-        StringFn: func() string {
-            return "something"
-        },
-    },
-    {
-        Score: 123,
-        StringFn: func() string {
-            return "something else"
-        },
-    },
-}
-
-// Because the structure has a `func` field, the structure `SomeStruct` is not a `comparable` type,
-// so that's where the func `MapNoComparable` becomes handy. This example transforms the source array
-// into an array functions []func() string using the function in the `StringFn` field
-
-funcs := streams.
-    MapNonComparable[SomeStruct, func() string](
-        arr,
-        func(x SomeStruct) func() string {
-            return x.StringFn
-        })
+result := streams.Concat[int]([]int{1, 2}, []int{3, 4}).ToArray()
+// result = [1, 2, 3, 4]
 ```
-*4. Using the `MapToPtr` function*
+
+#### Zip
+
+- `Zip[A, B, R comparable](sourceA any, sourceB any, f func(A, B) R) IList[R]`: Combines two sources element-wise
+using the provided function. Stops at the shorter source.
+
 ```go
-// Using the same struct and array as the example above
+result := streams.Zip[int, string, string](
+    []int{1, 2, 3},
+    []string{"a", "b", "c"},
+    func(i int, s string) string { return strconv.Itoa(i) + s },
+)
+// result contains ["1a", "2b", "3c"]
+```
 
-// Given the following struct
-type SomeStruct struct {
-    Name       string
-    Score      int
-    StringFn   func() string
-}
+#### GroupBy
 
-// And given the following array
-arr := []SomeStruct{
-    {
-        Name: "abcd",
-        StringFn: func() string {
-            return "something"
-        },
-    },
-    {
-        Score: 123,
-        StringFn: func() string {
-            return "something else"
-        },
-    },
-}
+- `GroupBy[T comparable, K comparable](source any, keyFn func(T) K) map[K][]T`: Groups the elements by a key function,
+returning a map of key to slices.
 
+```go
+result := streams.GroupBy[string, string](
+    []string{"apple", "avocado", "banana", "blueberry"},
+    func(s string) string { return string(s[0]) },
+)
+// result = {"a": ["apple", "avocado"], "b": ["banana", "blueberry"]}
+```
 
-// Say in this case, we would like to obtain an array of functions []func() string contained in the
-// source structure, but only for those structures that have a `Score` of 50 or higher.
-//
-// streams.From[SomeStruct] will not work because `SomeStruct` is not `comparable`, so we can do the
-// following:
+#### DistinctBy
 
-// Convert `arr` from []SomeStruct to []*SomeStruct
-newArr := MapToPtr[SomeStruct](arr)
+- `DistinctBy[T comparable, K comparable](source any, keyFn func(T) K) IList[T]`: Returns a new `IList` with duplicates
+removed based on a key function.
 
-// Now, `newArr` can be used in streams because *SomeStruct is `comparable`
-funcs := streams.
-    Map[*SomeStruct, func() string](
-        streams.                               // The source stream for mapping
-            From[*SomeStruct](newArr).
-            Filter(func (x *SomeStruct){       // The filtering in the source stream
-                return x.Score >= 50
-            }),
-        func(x *SomeStruct) func() string {    // The mapping function
-            return x.StringFn
-        },
-    )
- 
+```go
+result := streams.DistinctBy[string, byte](
+    []string{"apple", "avocado", "banana"},
+    func(s string) byte { return s[0] },
+)
+// result contains ["apple", "banana"] (first occurrence per key)
+```
+
+#### Aggregation functions
+
+- `Min[T comparable](source any, less func(T, T) bool) (T, bool)`: Returns the minimum element using the provided
+comparison function. Returns `(zeroValue, false)` if the source is empty.
+
+- `Max[T comparable](source any, less func(T, T) bool) (T, bool)`: Returns the maximum element using the provided
+comparison function. Returns `(zeroValue, false)` if the source is empty.
+
+- `Sum[T INumeric](source any) T`: Returns the sum of all numeric elements. `INumeric` includes `int`, `int8`, `int16`,
+`int32`, `int64`, `uint`, `uint8`, `uint16`, `uint32`, `uint64`, `float32`, `float64`.
+
+- `Average[T INumeric](source any) (float64, bool)`: Returns the average of all numeric elements as `float64`. Returns
+`(0, false)` if the source is empty.
+
+```go
+min, _ := streams.Min[int]([]int{5, 3, 8, 1}, func(a, b int) bool { return a < b })
+// min = 1
+
+max, _ := streams.Max[int]([]int{5, 3, 8, 1}, func(a, b int) bool { return a < b })
+// max = 8
+
+sum := streams.Sum[int]([]int{1, 2, 3, 4, 5})
+// sum = 15
+
+avg, _ := streams.Average[int]([]int{10, 20, 30})
+// avg = 20.0
+```
+
+#### Set operations
+
+- `Union[T comparable](sourceA, sourceB any) IList[T]`: Returns a new `IList` containing the distinct union of elements
+from both sources, preserving order of first appearance.
+
+- `Intersect[T comparable](sourceA, sourceB any) IList[T]`: Returns a new `IList` containing elements that are present
+in both sources.
+
+```go
+union := streams.Union[int]([]int{1, 2, 3}, []int{3, 4, 5})
+// union contains [1, 2, 3, 4, 5]
+
+intersect := streams.Intersect[int]([]int{1, 2, 3}, []int{2, 3, 4})
+// intersect contains [2, 3]
+```
+
+#### Factory functions
+
+- `Range(start, end int) IStream[int]`: Creates a stream of integers from `start` (inclusive) to `end` (exclusive).
+
+- `Repeat[T comparable](value T, n int) IStream[T]`: Creates a stream containing the given value repeated `n` times.
+
+```go
+rangeStream := streams.Range(0, 5).ToArray()
+// [0, 1, 2, 3, 4]
+
+repeatStream := streams.Repeat[string]("hello", 3).ToArray()
+// ["hello", "hello", "hello"]
+```
+
+#### Sorting utilities
+
+- `Sort[T ISortable](arr []T, desc ...bool)`: Sorts a slice of comparable types in-place. `ISortable` includes all
+numeric types and `string`.
+
+- `ComparableFn[T ISortable](desc ...bool) SortFunc[T]`: Creates a `SortFunc[T]` for built-in sortable types that can
+be used with `IStream.Sort()`.
+
+```go
+arr := []int{5, 3, 1, 4, 2}
+streams.Sort(arr) // arr is now [1, 2, 3, 4, 5]
+
+sorted := streams.From[int](arr).Sort(streams.ComparableFn[int]()).ToArray()
+```
+
+#### Predefined mappers
+
+Access built-in conversion functions via `Mappers()`:
+
+- `Mappers().IntToString()`: Returns a `ConvertFunc[int, string]`.
+- `Mappers().StringToInt(errorHandler ...func(string, error))`: Returns a `ConvertFunc[string, int]`. Optionally accepts
+an error handler for invalid conversions.
+
+```go
+intArr := streams.Map[string, int](
+    []string{"1", "2", "3"},
+    streams.Mappers().StringToInt(),
+)
 ```
 
 ### Parallelism
@@ -388,7 +420,7 @@ terminal operation and executing it in parallel cannot guarantee the final order
 
 There are multiple ways of enabling parallelism in a stream.
 
-- As a variadic argument at the time of creation. (Supported by `From`, `FromArray` and `FromIterator`)
+- As a variadic argument at the time of creation. (Supported by `From`, `FromArray` and `FromCollection`)
 
 ```go
 stream := streams.
@@ -399,70 +431,54 @@ stream := streams.
     Sort(sorterHandler)
 ```
 
-- As a variadic argument when adding a filter or except
-
-```go
-stream := streams.
-    FromArray[T](array).
-    Filter(filterHandler, 8).    // Adds a filter to the stream, the second (variadic) argument indicates the amount
-                                 // of threads to be used when executing intermediate operations
-    Except(exceptHandler).
-    Sort(sorterHandler)
-
-stream := streams.
-    FromArray[T](array).
-    Filter(filterHandler).
-    Except(exceptHandler, 8).    // Adds an except to the stream, the second (variadic) argument indicates the amount of threads to be used when executing intermediate operations
-    Sort(sorterHandler)
-```
-
 - Explicitly to the stream at any point before a terminal operation
 
 ```go
 stream := streams.
-    FromArray(array).
+    FromArray[T](array).
     SetThreads(8).           // Sets the amount of threads to be used when executing intermediate operations
     Filter(filterHandler).
     Except(exceptHandler).
     Sort(sorterHandler)
-
-stream := streams.
-    FromArray(array).
-    Filter(filterHandler).
-    Except(exceptHandler).
-    Sort(sorterHandler).
-    SetThreads(8)            // Can be added at any point before invoking a terminal operation
 ```
 
-When setting the amount of threads at any of the options above, keep in mind, the amount of threads will be capped by the maximum amount of CPUs available in the host machine.
+When setting the amount of threads, the amount will be capped by the maximum number of CPUs available on the host
+machine. Any number equal to or lower than `0` can be provided to use the maximum available threads.
 
-Any number equal or lower than `0` can be provided if the maximum amount of threads is desired based on the CPUs cap.
+###### Executing a ForEach in parallel
 
-###### Executing a For Each in parallel
+The `ForEach` function by default does not run in parallel, regardless if threads were previously assigned for
+intermediate operations. The reason is that intermediate operations produce a result which may have been sorted.
+When running a `ForEach` in parallel, the order of execution cannot be guaranteed.
 
-The `ForEach` function by default does not run in parallel, regardless if threads were previously assigned for intermediate operations.
-The reason for this design is, intermediate operations produce a result which may have been sorted by a provided sorting algorithm.
-When running a `ForEach` in parallel, the order in which the foreach handlers will be ran for each element in the resulting stream cannot be guaranteed.
-
-Use `ParallelForEach` only when the order of execution does not matter when processing the elements of the stream
-
-The function `ParallelForeach(f function(x T), threads int, skipWait ...bool)` receives 3 args.
-
-- `f`: The handler which will process each single element of the stream.
-- `threads`: Indicates the amount of parallel go channels `ParallelForEach` will use. This will be capped by the amount of available CPUs in the host machine. Any number equal or lower than `0` can be provided if the maximum amount of threads is desired based on the CPUs cap.
-- `skipWait`: This is an optional variadic argument that indicates if `ParallelForEach` should wait until all of the go channels are done executing. If set to `true`, the function `ParallelForEach` will return immediately after the intermediate operations are done and the `ParallelForEach` process will run in the background.
-
-Example:
+Use `ParallelForEach` only when the order of execution does not matter.
 
 ```go
 stream := streams.
-    FromArray[T](array, 8).   // Setting 8 cores for intermediate operations, such as filtering.
+    FromArray[T](array, 8).
     Filter(filterHandler).
     Except(exceptHandler).
     Sort(sorterHandler).
-    ParallelForEach(function (x T) {
-
+    ParallelForEach(func(x T) {
         // foreach logic here.
+    }, 0)                     // 0 = use maximum available cores
+```
 
-    }, 0)                     // Setting the maximum amount of cores available for the ParallelForEach process.
+### Collections
+
+This library provides several collection types:
+
+- `ICollection[T comparable]`: Base collection interface with `Add`, `Remove`, `Contains`, `Len`, `Clear`, `ToArray`,
+  `ForEach`, and iterator support.
+- `IList[T comparable]`: Extends `ICollection` with index-based access (`Index`, `RemoveAt`), `Distinct`, and `Stream`.
+- `ISet[T comparable]`: A collection that guarantees unique values.
+- `IMap[K comparable, V any]`: A map that also implements `IList[*KeyValuePair[K, V]]` with `Get`, `Set`, `ContainsKey`,
+  `Keys`, `Delete`, and `ToMap`.
+
+#### Creating collections
+
+```go
+list := streams.NewList[int]([]int{1, 2, 3})
+set := streams.NewSet[int]()
+m := streams.NewMap[string, int](map[string]int{"a": 1, "b": 2})
 ```

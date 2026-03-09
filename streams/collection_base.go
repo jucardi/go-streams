@@ -81,7 +81,9 @@ func (c *CollectionBaseNoIterator[T]) ForEach(f IterFunc[T]) {
 
 func (c *CollectionBaseNoIterator[T]) AddFromIterator(iterator IIterator[T]) (ret bool) {
 	iterator.ForEachRemaining(func(item T) {
-		ret = ret || c.Add(item)
+		if c.Add(item) {
+			ret = true
+		}
 	})
 	return
 }
@@ -99,18 +101,22 @@ func (c *CollectionBaseNoIterator[T]) Remove(items ...T) bool {
 
 func (c *CollectionBaseNoIterator[T]) RemoveFromIterator(iterator IIterator[T]) (ret bool) {
 	iterator.ForEachRemaining(func(item T) {
-		ret = ret || c.Remove(item)
+		if c.Remove(item) {
+			ret = true
+		}
 	})
 	return ret
 }
 
 func (c *CollectionBaseNoIterator[T]) RemoveIf(condition ConditionalFunc[T], keepOrder ...bool) bool {
 	removed := 0
-	count := c.Len()
-	for i := 0; i < count-removed; i++ {
+	i := 0
+	for i < c.Len() {
 		val, _ := c.Index(i)
-		if condition(val) && c.RemoveAt(i+removed, keepOrder...) {
+		if condition(val) && c.RemoveAt(i, keepOrder...) {
 			removed++
+		} else {
+			i++
 		}
 	}
 	return removed > 0

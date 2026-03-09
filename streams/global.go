@@ -156,6 +156,7 @@ func MapNonComparable[From, To any](source any, f ConvertFunc[From, To]) []To {
 	case IIterable[From]:
 		return mapIterable[From, To](src, f)
 	case IIterator[From]:
+		return mapIterator[From, To](src, f)
 	}
 	panic("invalid mapping source")
 }

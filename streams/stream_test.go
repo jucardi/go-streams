@@ -319,3 +319,384 @@ func TestMapToPtr(t *testing.T) {
 	assert.Equal(t, "[]streams.testStruct", reflect.TypeOf(arr).String())
 	assert.Equal(t, "[]*streams.testStruct", reflect.TypeOf(ret).String())
 }
+
+func TestStream_SetThreads(t *testing.T) {
+	stream := FromArray[int]([]int{1, 2, 3, 4, 5}).SetThreads(2)
+	result := stream.Filter(func(x int) bool { return x > 2 }).ToArray()
+	assert.Len(t, result, 3)
+}
+
+func TestStream_NotAllMatch(t *testing.T) {
+	result := From[int]([]int{1, 2, 3}).NotAllMatch(func(x int) bool { return x > 2 })
+	assert.True(t, result)
+
+	result = From[int]([]int{3, 4, 5}).NotAllMatch(func(x int) bool { return x > 2 })
+	assert.False(t, result)
+}
+
+func TestStream_IsEmpty(t *testing.T) {
+	assert.True(t, FromArray[int]([]int{}).IsEmpty())
+	assert.False(t, FromArray[int]([]int{1}).IsEmpty())
+}
+
+func TestStream_At(t *testing.T) {
+	stream := FromArray[int]([]int{10, 20, 30, 40, 50})
+	assert.Equal(t, 10, stream.At(0))
+	assert.Equal(t, 30, stream.At(2))
+	assert.Equal(t, 50, stream.At(4))
+}
+
+func TestStream_At_OutOfBounds(t *testing.T) {
+	stream := FromArray[int]([]int{10, 20})
+	assert.Equal(t, 0, stream.At(-1))
+	assert.Equal(t, 0, stream.At(5))
+	assert.Equal(t, 99, stream.At(5, 99))
+}
+
+func TestStream_AtReverse(t *testing.T) {
+	stream := FromArray[int]([]int{10, 20, 30, 40, 50})
+	assert.Equal(t, 50, stream.AtReverse(0))
+	assert.Equal(t, 40, stream.AtReverse(1))
+	assert.Equal(t, 10, stream.AtReverse(4))
+}
+
+func TestStream_AtReverse_OutOfBounds(t *testing.T) {
+	stream := FromArray[int]([]int{10, 20})
+	assert.Equal(t, 0, stream.AtReverse(5))
+	assert.Equal(t, 99, stream.AtReverse(5, 99))
+}
+
+func TestStream_ToIterable(t *testing.T) {
+	stream := FromArray[int]([]int{1, 2, 3})
+	iterable := stream.ToIterable()
+	assert.NotNil(t, iterable)
+}
+
+func TestStream_ToList(t *testing.T) {
+	stream := FromArray[int]([]int{1, 2, 3})
+	list := stream.ToList()
+	assert.Equal(t, 3, list.Len())
+	assert.Equal(t, []int{1, 2, 3}, list.ToArray())
+}
+
+func TestStream_ToList_NilIterable(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	list := s.ToList()
+	assert.Equal(t, 0, list.Len())
+}
+
+func TestStream_ToDistinct(t *testing.T) {
+	arr := []int{1, 2, 2, 3, 3, 3}
+	set := FromArray[int](arr).ToDistinct()
+	assert.Equal(t, 3, set.Len())
+	assert.True(t, set.Contains(1, 2, 3))
+}
+
+func TestStream_ToDistinct_Empty(t *testing.T) {
+	set := FromArray[int]([]int{}).ToDistinct()
+	assert.Equal(t, 0, set.Len())
+}
+
+func TestStream_Skip(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3, 4, 5}).Skip(2).ToArray()
+	assert.Equal(t, []int{3, 4, 5}, result)
+}
+
+func TestStream_Skip_Zero(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3}).Skip(0).ToArray()
+	assert.Equal(t, []int{1, 2, 3}, result)
+}
+
+func TestStream_Skip_BeyondLength(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3}).Skip(10).ToArray()
+	assert.Empty(t, result)
+}
+
+func TestStream_Limit(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3, 4, 5}).Limit(3).ToArray()
+	assert.Equal(t, []int{1, 2, 3}, result)
+}
+
+func TestStream_Limit_Zero(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3}).Limit(0).ToArray()
+	assert.Empty(t, result)
+}
+
+func TestStream_Limit_BeyondLength(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3}).Limit(10).ToArray()
+	assert.Equal(t, []int{1, 2, 3}, result)
+}
+
+func TestStream_Reverse(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3, 4, 5}).Reverse().ToArray()
+	assert.Equal(t, []int{5, 4, 3, 2, 1}, result)
+}
+
+func TestStream_Reverse_Empty(t *testing.T) {
+	result := FromArray[int]([]int{}).Reverse().ToArray()
+	assert.Empty(t, result)
+}
+
+func TestStream_Reverse_Single(t *testing.T) {
+	result := FromArray[int]([]int{42}).Reverse().ToArray()
+	assert.Equal(t, []int{42}, result)
+}
+
+func TestStream_Peek(t *testing.T) {
+	var peeked []int
+	result := FromArray[int]([]int{1, 2, 3}).
+		Peek(func(x int) { peeked = append(peeked, x) }).
+		ToArray()
+	assert.Equal(t, []int{1, 2, 3}, result)
+	assert.Equal(t, []int{1, 2, 3}, peeked)
+}
+
+func TestStream_Peek_Empty(t *testing.T) {
+	var peeked []int
+	result := FromArray[int]([]int{}).
+		Peek(func(x int) { peeked = append(peeked, x) }).
+		ToArray()
+	assert.Empty(t, result)
+	assert.Empty(t, peeked)
+}
+
+func TestStream_TakeWhile(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3, 4, 5}).
+		TakeWhile(func(x int) bool { return x < 4 }).
+		ToArray()
+	assert.Equal(t, []int{1, 2, 3}, result)
+}
+
+func TestStream_TakeWhile_AllMatch(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3}).
+		TakeWhile(func(x int) bool { return x < 10 }).
+		ToArray()
+	assert.Equal(t, []int{1, 2, 3}, result)
+}
+
+func TestStream_TakeWhile_NoneMatch(t *testing.T) {
+	result := FromArray[int]([]int{5, 6, 7}).
+		TakeWhile(func(x int) bool { return x < 5 }).
+		ToArray()
+	assert.Empty(t, result)
+}
+
+func TestStream_SkipWhile(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3, 4, 5}).
+		SkipWhile(func(x int) bool { return x < 3 }).
+		ToArray()
+	assert.Equal(t, []int{3, 4, 5}, result)
+}
+
+func TestStream_SkipWhile_AllSkipped(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3}).
+		SkipWhile(func(x int) bool { return x < 10 }).
+		ToArray()
+	assert.Empty(t, result)
+}
+
+func TestStream_SkipWhile_NoneSkipped(t *testing.T) {
+	result := FromArray[int]([]int{5, 6, 7}).
+		SkipWhile(func(x int) bool { return x < 5 }).
+		ToArray()
+	assert.Equal(t, []int{5, 6, 7}, result)
+}
+
+func TestStream_Chunk(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3, 4, 5}).Chunk(2)
+	assert.Len(t, result, 3)
+	assert.Equal(t, []int{1, 2}, result[0])
+	assert.Equal(t, []int{3, 4}, result[1])
+	assert.Equal(t, []int{5}, result[2])
+}
+
+func TestStream_Chunk_ExactDivision(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3, 4}).Chunk(2)
+	assert.Len(t, result, 2)
+	assert.Equal(t, []int{1, 2}, result[0])
+	assert.Equal(t, []int{3, 4}, result[1])
+}
+
+func TestStream_Chunk_SizeLargerThanStream(t *testing.T) {
+	result := FromArray[int]([]int{1, 2}).Chunk(10)
+	assert.Len(t, result, 1)
+	assert.Equal(t, []int{1, 2}, result[0])
+}
+
+func TestStream_Chunk_Empty(t *testing.T) {
+	result := FromArray[int]([]int{}).Chunk(3)
+	assert.Nil(t, result)
+}
+
+func TestStream_Chunk_ZeroSize(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3}).Chunk(0)
+	assert.Nil(t, result)
+}
+
+func TestStream_NilIterable_Count(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	assert.Equal(t, 0, s.Count())
+}
+
+func TestStream_NilIterable_AnyMatch(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	assert.False(t, s.AnyMatch(func(x int) bool { return true }))
+}
+
+func TestStream_NilIterable_AllMatch(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	assert.True(t, s.AllMatch(func(x int) bool { return true }))
+}
+
+func TestStream_NilIterable_ForEach(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	s.ForEach(func(x int) {
+		t.Fatal("should not be called")
+	})
+}
+
+func TestStream_NilIterable_ToArray(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	assert.Nil(t, s.ToArray())
+}
+
+func TestStream_NilIterable_ParallelForEach(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	s.ParallelForEach(func(x int) {
+		t.Fatal("should not be called")
+	}, 2)
+}
+
+func TestStream_Chained_Pipeline(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}).
+		Filter(func(x int) bool { return x%2 == 0 }).
+		Sort(ComparableFn[int](), true).
+		Skip(1).
+		Limit(3).
+		ToArray()
+	assert.Equal(t, []int{8, 6, 4}, result)
+}
+
+func TestStream_ProcessCaching(t *testing.T) {
+	callCount := 0
+	stream := FromArray[int]([]int{1, 2, 3}).
+		Filter(func(x int) bool {
+			callCount++
+			return true
+		})
+
+	_ = stream.Count()
+	count1 := callCount
+	_ = stream.ToArray()
+	assert.Equal(t, count1, callCount, "process() should cache results")
+}
+
+func TestStream_ParallelForEach_EmptyCollection(t *testing.T) {
+	called := false
+	FromArray[int]([]int{}).ParallelForEach(func(x int) {
+		called = true
+	}, 2)
+	assert.False(t, called)
+}
+
+func TestStream_NilIterable_Skip(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	result := s.Skip(1).ToArray()
+	assert.Empty(t, result)
+}
+
+func TestStream_NilIterable_Limit(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	result := s.Limit(1).ToArray()
+	assert.Empty(t, result)
+}
+
+func TestStream_NilIterable_Reverse(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	result := s.Reverse().ToArray()
+	assert.Empty(t, result)
+}
+
+func TestStream_NilIterable_Peek(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	result := s.Peek(func(x int) {}).ToArray()
+	assert.Empty(t, result)
+}
+
+func TestStream_NilIterable_TakeWhile(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	result := s.TakeWhile(func(x int) bool { return true }).ToArray()
+	assert.Empty(t, result)
+}
+
+func TestStream_NilIterable_SkipWhile(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	result := s.SkipWhile(func(x int) bool { return true }).ToArray()
+	assert.Empty(t, result)
+}
+
+func TestStream_NilIterable_Chunk(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	result := s.Chunk(2)
+	assert.Nil(t, result)
+}
+
+func TestStream_NilIterable_IfEmpty(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	thenCalled := false
+	s.IfEmpty().Then(func(st IStream[int]) {
+		thenCalled = true
+	})
+	assert.True(t, thenCalled)
+}
+
+func TestStream_NilIterable_ToDistinct(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	result := s.ToDistinct()
+	assert.Equal(t, 0, result.Len())
+}
+
+func TestStream_AtReverse_NilIterable(t *testing.T) {
+	s := &Stream[int]{iterable: nil}
+	assert.Equal(t, 0, s.AtReverse(0))
+	assert.Equal(t, 99, s.AtReverse(0, 99))
+}
+
+func TestStream_ParallelProcess_WithFilters(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3, 4, 5, 6, 7, 8, 9, 10}, -1).
+		Filter(func(x int) bool { return x%2 == 0 }).
+		Sort(ComparableFn[int]()).
+		ToArray()
+	assert.Equal(t, []int{2, 4, 6, 8, 10}, result)
+}
+
+func TestStream_ParallelProcess_NoFilters(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3}, -1).
+		Sort(ComparableFn[int](), true).
+		ToArray()
+	assert.Equal(t, []int{3, 2, 1}, result)
+}
+
+func TestStream_ToDistinct_WithSort(t *testing.T) {
+	result := FromArray[int]([]int{3, 1, 2, 1, 3}).Sort(ComparableFn[int]()).ToDistinct()
+	assert.Equal(t, 3, result.Len())
+}
+
+func TestStream_Count_NegativeLen(t *testing.T) {
+	s := FromArray[int]([]int{1, 2, 3})
+	assert.Equal(t, 3, s.Count())
+}
+
+func TestStream_Skip_Negative(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3}).Skip(-1).ToArray()
+	assert.Equal(t, []int{1, 2, 3}, result)
+}
+
+func TestStream_Limit_Negative(t *testing.T) {
+	result := FromArray[int]([]int{1, 2, 3}).Limit(-1).ToArray()
+	assert.Empty(t, result)
+}
+
+func TestStream_ParallelForEach_SkipWait(t *testing.T) {
+	FromArray[int]([]int{1, 2, 3, 4, 5}).ParallelForEach(func(x int) {}, 2, true)
+}

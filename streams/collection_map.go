@@ -67,7 +67,7 @@ func (col *mapCollection[K, V]) Delete(k K) bool {
 		if k != key {
 			continue
 		}
-		col.keys = append(col.keys[:i], col.keys[i:]...)
+		col.keys = append(col.keys[:i], col.keys[i+1:]...)
 		return true
 	}
 	return false
@@ -100,7 +100,7 @@ func (col *mapCollection[K, V]) Add(items ...*KeyValuePair[K, V]) (ret bool) {
 
 func (col *mapCollection[K, V]) RemoveAt(index int, _ ...bool) bool {
 	keys := col.Keys()
-	if index < 0 || len(keys) >= index {
+	if index < 0 || index >= len(keys) {
 		return false
 	}
 	return col.Delete(keys[index])
